@@ -1,0 +1,36 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# runtime data (user media, generated clips, models, binaries)
+projects/
+outputs/
+models/
+bin/
+*.pt
+*.onnx
+*.tflite
+*.mp4
+*.mov
+*.mkv
+*.part
+*.ytdl
+
+# remotion
+remotion/node_modules/
+remotion/public/
+remotion/out/
+remotion/.cache/
+
+# python / tooling
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+*.tmp
+*.log
+.DS_Store
+Thumbs.db

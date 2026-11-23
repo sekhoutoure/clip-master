@@ -1,0 +1,9 @@
+{
+  "project_id": "sample",
+  "fps": 30,
+  "durationInFrames": 150,
+  "captions": [
+    {"id": "cap_1", "text": "HELLO CLIP MASTER", "start": 0.2, "end": 2.0},
+    {"id": "cap_2", "text": "WORD POP CAPTIONS", "start": 2.2, "end": 4.5}
+  ]
+}

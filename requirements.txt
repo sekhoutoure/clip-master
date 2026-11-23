@@ -1,0 +1,25 @@
+# CLIP MASTER — Python 3.10 - 3.12 recommended (MediaPipe / PyTorch wheels).
+# Compatible-release pins ("~=") tested on 2026-11-23; upgrade at your own pace.
+
+# web app
+fastapi~=0.165
+uvicorn[standard]~=0.54
+python-multipart~=0.0.34
+python-dotenv~=1.2
+
+# vision / media
+opencv-python>=4.10,<6
+numpy>=2.0,<3
+scipy~=1.18
+pillow>=11
+imageio-ffmpeg~=0.8
+mediapipe~=1.2
+ultralytics~=8.4          # YOLO (AGPL-3.0) - pulls in PyTorch
+
+# transcription / video tools
+faster-whisper~=1.2
+yt-dlp>=2026.10
+streamlink~=8.6
+scenedetect~=0.7
+auto-editor~=29.3
+demucs~=4.1               # optional voice/music split (only used when ticked in the UI)

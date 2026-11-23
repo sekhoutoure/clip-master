@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLIP MASTER — Studio Shorts 9:16</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="ui-simple">
+  <div class="studio-shell">
+    <!-- BARRE SUPÉRIEURE COMPACTE -->
+    <header class="topbar card topbar-card">
+      <div class="topbar-left">
+        <div class="brand-compact">CLIP <span class="pink">MASTER</span></div>
+        <div class="project-pill">
+          <span class="rec-dot"></span>
+          <select id="projectSwitcher" class="project-select" onchange="switchProject(this.value)" title="Changer de projet">
+            <option value="">Aucun projet</option>
+          </select>
+          <button class="cap-mini-btn danger" onclick="deleteCurrentProject()" title="Supprimer le projet actif">&#128465;</button>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="mode-tab" id="btnAvance" onclick="toggleAvance()" title="Outils avancés">Avancé</button>
+        <button class="mode-tab sr-only" id="btnUiSimple" onclick="setUiMode('simple')" tabindex="-1">SIMPLE</button>
+        <button class="mode-tab sr-only" id="btnUiPro" onclick="setUiMode('pro')" tabindex="-1">PRO</button>
+        <button class="agent-toggle pro-only" id="btnAgentsToggle" onclick="toggleAgentsVisible()" title="Agents">
+          <span class="agent-dot"></span> Agents
+        </button>
+        <button class="mode-tab pro-only" id="btnSwarmDemo" onclick="triggerSwarmChoreography()" title="Agents IA">IA Crew</button>
+        <button class="mode-tab active pro-only" id="btnModeEdit" onclick="setPreviewMode('edit')">Edit</button>
+        <button class="mode-tab pro-only" id="btnModePreview" onclick="setPreviewMode('preview')">Preview</button>
+      </div>
+    </header>
+
+    <!-- ÉTAPE 1 : IMPORTER & CHOISIR UN STYLE -->
+    <section class="ingest-bar card step-card">
+      <div class="step-head">
+        <span class="step-num">1</span>
+        <span class="step-title">Importer</span>
+      </div>
+
+      <div class="ingest-row">
+        <input id="urlInput" type="text" class="mono-input" placeholder="Colle un lien ou un MP4" />
+        <select id="pullEngine" class="mono-select pro-only" title="Moteur">
+          <option value="ytdlp">01 yt-dlp</option>
+          <option value="streamlink">02 streamlink (Live 25s)</option>
+          <option value="twitchdownloader">03 TwitchDownloader (VOD + Chat)</option>
+        </select>
+        <button class="btn-outline" id="btnPullUrl" onclick="pullFromUrl()">Lien</button>
+        <label class="btn-outline upload-label">
+          MP4
+          <input type="file" id="fileUpload" accept="video/*" hidden onchange="uploadLocalFile(event)" />
+        </label>
+      </div>
+
+      <div class="step-head">
+        <span class="step-num">2</span>
+        <span class="step-title">Style</span>
+      </div>
+
+      <div class="preset-bar">
+        <button class="preset-chip" id="presetTracked" onclick="selectQuickPreset('tracked')" title="Suit le sujet (YOLO) et affiche la facecam en haut">Suivi</button>
+        <button class="preset-chip active" id="presetFacecam" onclick="selectQuickPreset('facecam')">Standard</button>
+        <button class="preset-chip pro-only" id="presetTiktok" onclick="selectQuickPreset('tiktok')">9:16</button>
+      </div>
+
+      <!-- OPTIONS MODE SUIVI (visibles quand « Suivi » est actif ou en mode Pro) -->
+      <div class="tracked-bar" id="trackedBar">
+        <label class="mini-check tracked-master" title="Mode suivi"><input type="checkbox" id="chkTracked" onchange="onTrackedToggle()" /> Suivi</label>
+        <label class="mini-check pro-only" title="Un QC raté marque l'export comme rejeté"><input type="checkbox" id="chkTrackedStrict" onchange="onTrackedToggle()" /> QC strict</label>
+        <label class="mini-check pro-only"><input type="checkbox" id="chkFacecamInset" checked onchange="onTrackedToggle()" /> Facecam</label>
+        <label class="mini-check pro-only"><input type="checkbox" id="chkTrackCrop" checked onchange="onTrackedToggle()" /> YOLO</label>
+        <label class="mini-check pro-only" title="Retire les gros mots des sous-titres (l'audio n'est pas modifié)"><input type="checkbox" id="chkCensor" onchange="onTrackedToggle()" /> Filtre gros mots</label>
+        <select id="censorMode" class="mono-select small pro-only" onchange="onTrackedToggle()">
+          <option value="remove">retirer</option>
+          <option value="mask">masquer (P****)</option>
+        </select>
+      </div>
+
+      <!-- OPTIONS AVANCÉES REPLIABLES -->
+      <div class="step-head step-create">
+        <span class="step-num">3</span>
+        <button class="btn-pink btn-primary-cta" id="btnRunAll" onclick="runFullPipeline()">Créer le Short</button>
+      </div>
+
+      <details class="advanced-drawer pro-only" id="advancedDrawer">
+        <summary class="advanced-summary">Étapes manuelles</summary>
+        <div class="stage-pills">
+          <button class="stage-btn" onclick="runStage('find')">02 / FIND</button>
+          <button class="stage-btn" onclick="runStage('track')">03 / TRACK</button>
+          <button class="stage-btn" onclick="runStage('caption')">04 / CAPTION</button>
+          <button class="stage-btn" onclick="runStage('ship')">05 / SHIP</button>
+          <label class="mini-check"><input type="checkbox" id="chkSilence" /> auto-editor silence</label>
+          <label class="mini-check"><input type="checkbox" id="chkDemucs" /> Demucs vocals</label>
+          <label class="mini-check"><input type="checkbox" id="chkLossless" /> Trim sans ré-encodage</label>
+          <label class="mini-check"><input type="checkbox" id="chkUpscale" /> Netteté +</label>
+          <label class="mini-check"><input type="checkbox" id="chkRetention" checked /> Barre rétention + -14 LUFS</label>
+          <select id="whisperModel" class="mono-select small">
+            <option value="tiny">Whisper: tiny (rapide)</option>
+            <option value="base">Whisper: base</option>
+            <option value="small">Whisper: small (précis)</option>
+          </select>
+          <select id="whisperLang" class="mono-select small" title="Langue de transcription">
+            <option value="auto">Langue: Auto</option>
+            <option value="fr">Langue: FR</option>
+            <option value="en">Langue: EN</option>
+            <option value="es">Langue: ES</option>
+          </select>
+        </div>
+      </details>
+    </section>
+
+    <!-- STATUT EN COURS -->
+    <section class="phase-bar card">
+      <div class="phase-row">
+        <div class="phase-left">
+          <span class="phase-tag" id="phaseTag">PRÊT</span>
+          <span class="phase-msg" id="phaseMsg">Prêt</span>
+        </div>
+        <div class="phase-time" id="phaseTime">00.00 / 00.00</div>
+      </div>
+      <div class="phase-progress-track">
+        <div class="phase-progress-fill" id="phaseProgressBar"></div>
+      </div>
+    </section>
+
+    <!-- BARRE AGENTS (MODE PRO) -->
+    <section class="agents-strip card pro-only" id="agentsStrip">
+      <div class="agents-strip-left">
+        <span class="agents-strip-title" id="agentsCounter">BACKEND AGENTS · IDLE</span>
+      </div>
+      <div class="agents-badges" id="agentsBadges"></div>
+    </section>
+
+    <!-- ÉTAPE 2 : APERÇU, RETOUCHE & EXPORT -->
+    <section class="workspace-grid">
+      <!-- GAUCHE : VIDÉO SOURCE -->
+      <div class="card program-card">
+        <div class="card-head">
+          <span>Source · <strong id="programSourceName">Aucune</strong></span>
+          <button class="tiny-toggle" id="btnSpeedToggle" onclick="cyclePlaybackSpeed()" title="Vitesse">1.0x</button>
+        </div>
+
+        <div class="monitor-wrap" id="monitorWrap">
+          <video id="mainVideo" playsinline preload="metadata" crossorigin="anonymous"></video>
+          <div class="empty-monitor" id="emptyMonitor">
+            <div class="empty-title">Pas de vidéo</div>
+            <div class="empty-sub">Colle un lien ou un MP4</div>
+          </div>
+
+          <!-- Interactive Overlay Layer -->
+          <div class="overlay-layer" id="overlayLayer">
+            <div class="face-box" id="faceBox" title="Zone facecam (déplaçable)">
+              <div class="face-inner"></div>
+              <div class="face-badge" id="faceBadge">FACECAM</div>
+            </div>
+            <div class="crop-box" id="cropBox" title="Glisser horizontalement pour recadrer en 9:16">
+              <div class="crop-badge" id="cropBadge">9:16 · 50%</div>
+              <span class="handle tl"></span>
+              <span class="handle tr"></span>
+              <span class="handle bl"></span>
+              <span class="handle br"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sous-titre en direct -->
+        <div class="live-caption-strip" id="liveCaptionStrip">Sous-titre</div>
+
+        <!-- Contrôles de lecture -->
+        <div class="transport-bar">
+          <div class="transport-btns">
+            <button class="icon-btn" id="btnPlayPause" onclick="togglePlay()" title="Lecture / Pause (Espace)">&#9654;</button>
+            <button class="icon-btn" onclick="seekRelative(-2)" title="-2s">&#9664;&#9664;</button>
+            <button class="icon-btn" onclick="seekRelative(2)" title="+2s">&#9654;&#9654;</button>
+          </div>
+          <div class="timecode-big" id="timecodeBig">00:00:00</div>
+          <div class="muted stream-tag" id="streamMetaTag">9:16</div>
+        </div>
+        <div class="play-progress-track">
+          <div class="play-progress-fill" id="playProgressFill"></div>
+        </div>
+
+        <!-- Mini-barre de découpe rapide (accessible en mode Simple) -->
+        <div class="simple-trim-bar">
+          <button class="cap-mini-btn" onclick="setTrimPoint('in')" title="Début (I)">Début</button>
+          <button class="cap-mini-btn" onclick="setTrimPoint('out')" title="Fin (O)">Fin</button>
+          <span class="trim-pill" id="simpleTrimLabel">0.0s → 15.0s</span>
+        </div>
+
+        <!-- Moments détectés intégrés sous la vidéo pour garder la colonne droite focalisée -->
+        <div class="moments-inline">
+          <div class="moments-inline-head">
+            <span class="micro-label">Moments</span>
+            <span class="muted" id="cutsCountLabel">0</span>
+          </div>
+          <div class="moments-grid" id="momentsGrid">
+            <div class="moment-placeholder">Aucun pour l’instant</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DROITE : APERÇU 9:16 + EXPORT + SOUS-TITRE -->
+      <div class="right-stack">
+        <!-- APERÇU 9:16 & EXPORT (EN HAUT : ACTION PRINCIPALE) -->
+        <div class="card output-card">
+          <div class="card-head">
+            <span><strong class="step-inline">4</strong> Aperçu</span>
+            <button class="tiny-toggle" id="btnLayoutToggle" onclick="toggleLayoutMode()">Facecam</button>
+          </div>
+          <div class="output-body">
+            <div class="vertical-preview-wrap">
+              <canvas id="verticalCanvas" width="180" height="320"></canvas>
+            </div>
+            <div class="output-meta">
+              <div class="short-title">SHORT_01</div>
+              <div class="muted small-meta">1080&times;1920 &middot; MP4</div>
+              <div class="teal-meta" id="outputLayoutLabel">FACECAM + GAME + CAPS</div>
+
+              <button class="export-btn" id="btnExport" onclick="runStage('ship')">Exporter</button>
+              <button class="export-btn secondary pro-only" id="btnBatchExport" onclick="runBatchShip()">Batch 3</button>
+              <button class="export-btn secondary pro-only" id="btnRemotionRender" onclick="runRemotionRender()" style="color:#6366f1;border-color:#6366f1">Remotion</button>
+
+              <div class="seg-meter" id="segMeter">
+                <span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+
+              <div id="exportDownloadWrap" class="export-download hidden">
+                <a id="exportDownloadLink" href="#" target="_blank" download>Télécharger</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ÉDITION SIMPLE DES SOUS-TITRES -->
+        <div class="card inspector-card">
+          <div class="card-head">
+            <span>Sous-titres</span>
+            <span class="pink-sm pro-only">Clés</span>
+          </div>
+
+          <div class="caption-edit-box">
+            <div class="cap-edit-head">
+              <label class="micro-label">Texte</label>
+              <div class="cap-mini-actions">
+                <button class="cap-mini-btn" onclick="addCaptionAtPlayhead()" title="Ajouter un sous-titre ici">+ Ajouter</button>
+                <button class="cap-mini-btn pro-only" onclick="shiftSelectedCaption(-0.2)" title="Décaler -0.2s">-0.2s</button>
+                <button class="cap-mini-btn pro-only" onclick="shiftSelectedCaption(0.2)" title="Décaler +0.2s">+0.2s</button>
+                <button class="cap-mini-btn danger" onclick="deleteSelectedCaption()" title="Supprimer">Suppr.</button>
+                <button class="cap-mini-btn pro-only" onclick="downloadSrt()" title="Télécharger SRT">SRT ↓</button>
+                <button class="cap-mini-btn pro-only" onclick="downloadRemotionJson()" title="Exporter JSON Remotion">REMOTION ↓</button>
+              </div>
+            </div>
+            <input id="captionInput" type="text" class="caption-text-input" value="NEW CAPTION" oninput="onCaptionEdit(this.value)" />
+          </div>
+
+          <div class="slider-row">
+            <span class="micro-label">TAILLE</span>
+            <input id="fontSizeSlider" type="range" min="24" max="68" value="40" oninput="onFontSizeChange(this.value)" />
+            <span class="orange-val" id="fontSizeVal">40 PX</span>
+          </div>
+
+          <div class="style-swatches">
+            <span class="micro-label">STYLE</span>
+            <button class="swatch-btn" data-style="tiktok_white" onclick="setCaptionStyle('tiktok_white')" style="--sw:#ffffff; color:#000; font-style:italic; font-weight:900" title="Style TikTok: Blanc Italique + Contour Noir">TIKTOK</button>
+            <button class="swatch-btn" data-style="tiktok_yellow" onclick="setCaptionStyle('tiktok_yellow')" style="--sw:#ffe600; color:#000; font-style:italic; font-weight:900" title="Style TikTok Jaune">TT JAUNE</button>
+            <button class="swatch-btn active" data-style="pink" onclick="setCaptionStyle('pink')" style="--sw:#ee1d6c">ROSE</button>
+            <button class="swatch-btn" data-style="yellow" onclick="setCaptionStyle('yellow')" style="--sw:#facc15">JAUNE</button>
+            <button class="swatch-btn" data-style="cyan" onclick="setCaptionStyle('cyan')" style="--sw:#06b6d4">CYAN</button>
+            <button class="swatch-btn" data-style="white" onclick="setCaptionStyle('white')" style="--sw:#171717">BLANC</button>
+          </div>
+
+          <div class="track-row pro-only">
+            <div class="track-metrics">
+              <div class="teal-label">FACE TRACK</div>
+              <div class="track-x">X &nbsp;<span id="faceTrackX">50.0%</span></div>
+              <div class="micro-label">WORDS &nbsp;<span id="wordsTiming">0.00s</span></div>
+            </div>
+            <svg id="sparklineSvg" class="sparkline" viewBox="0 0 180 48" preserveAspectRatio="none"></svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EXPORTS PRÊTS & TITRE VIRAL -->
+    <section class="card publish-card" id="publishCard">
+      <div class="card-head">
+        <span>Publier</span>
+        <div class="cap-mini-actions">
+          <button class="cap-mini-btn" onclick="copyViralKit()">Copier titre</button>
+          <button class="cap-mini-btn" onclick="openOutputsFolder()">Dossier</button>
+        </div>
+      </div>
+      <div class="publish-grid">
+        <div class="viral-kit-box">
+          <div class="micro-label">Titre</div>
+          <div class="viral-title" id="viralTitle">—</div>
+          <div class="viral-tags" id="viralTags">#Shorts</div>
+        </div>
+        <div class="exports-list" id="exportsList">
+          <div class="muted" style="font-size:11px">Aucun export</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TIMELINE MULTI-PISTES (MODE PRO) -->
+    <section class="card sequence-card pro-only">
+      <div class="card-head">
+        <span>TIMELINE / <strong>SHORT_01</strong></span>
+        <div class="cap-mini-actions">
+          <button class="cap-mini-btn" onclick="setTrimPoint('in')" title="Définir le début du clip ici (Touche I)">DÉBUT [I]</button>
+          <button class="cap-mini-btn" onclick="setTrimPoint('out')" title="Définir la fin du clip ici (Touche O)">FIN [O]</button>
+          <span class="muted" id="seqDurationLabel" style="margin-left:6px">00s &mdash; 20s</span>
+        </div>
+      </div>
+
+      <div class="timeline-shell" id="timelineShell">
+        <div class="playhead" id="playhead">
+          <div class="playhead-head"></div>
+          <div class="playhead-line"></div>
+        </div>
+        <div class="track-line">
+          <div class="track-label">SOURCE</div>
+          <div class="track-content filmstrip-track" id="filmstripTrack">
+            <div class="highlight-box" id="highlightBox">
+              <span class="highlight-badge" id="highlightBadge">HIGHLIGHT --</span>
+            </div>
+          </div>
+        </div>
+        <div class="track-line">
+          <div class="track-label">CAPTIONS</div>
+          <div class="track-content captions-track" id="captionsTrack"></div>
+        </div>
+        <div class="track-line">
+          <div class="track-label">FACE</div>
+          <div class="track-content face-curve-track">
+            <svg id="faceTimelineSvg" viewBox="0 0 1000 26" preserveAspectRatio="none"></svg>
+          </div>
+        </div>
+        <div class="track-line">
+          <div class="track-label">AUDIO</div>
+          <div class="track-content audio-track" id="audioTrack"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- THE CLIPPING DESK / 19 TOOLS (MODE PRO) -->
+    <section class="card desk-card pro-only">
+      <div class="card-head">
+        <span>THE CLIPPING DESK / <strong>19 TOOLS</strong></span>
+        <span class="pink-sm" id="reposReadySummary">vérification des outils…</span>
+      </div>
+      <div class="repos-grid" id="reposGrid"></div>
+    </section>
+
+    <!-- LIVE AGENT TELEMETRY LOGS (MODE PRO) -->
+    <section class="card telemetry-card pro-only">
+      <div class="card-head">
+        <span>JOURNAL TECHNIQUE / <strong>AGENTS</strong></span>
+        <span class="muted">RACCOURCIS: [ESPACE] PLAY &middot; [←/→] ±1S &middot; [I/O] TRIM &middot; [E] EXPORT</span>
+      </div>
+      <div class="telemetry-log" id="telemetryLog"></div>
+    </section>
+  </div>
+
+  <!-- Repo Inspector Modal -->
+  <div class="modal-backdrop hidden" id="repoModal" onclick="closeRepoModal()">
+    <div class="modal-card card" onclick="event.stopPropagation()">
+      <div class="card-head">
+        <span id="modalRepoTitle">01 yt-dlp</span>
+        <button class="icon-btn" onclick="closeRepoModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modalRepoBody"></div>
+    </div>
+  </div>
+
+  <!-- 9:16 Exported Short Player Modal -->
+  <div class="modal-backdrop hidden" id="shortPreviewModal" onclick="closeShortModal()">
+    <div class="phone-modal card" onclick="event.stopPropagation()">
+      <div class="card-head">
+        <span id="shortModalTitle">SHORT_01 · 9:16 H.264</span>
+        <button class="icon-btn" onclick="closeShortModal()">&times;</button>
+      </div>
+      <div class="phone-frame">
+        <video id="shortModalVideo" controls autoplay loop playsinline></video>
+      </div>
+      <div class="phone-modal-actions">
+        <a id="shortModalDownload" class="btn-pink" href="#" download style="text-decoration:none">Télécharger</a>
+        <button class="btn-outline" onclick="copyViralKit()">Copier titre</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visible Multiplayer AI Agent Cursors Layer -->
+  <div class="agent-stage" id="agentStage" aria-hidden="true"></div>
+  <div class="toast-host" id="toastHost" aria-live="polite"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

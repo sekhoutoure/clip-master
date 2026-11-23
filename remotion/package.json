@@ -1,0 +1,15 @@
+{
+  "name": "clip-master-remotion",
+  "version": "1.0.0",
+  "description": "18 Remotion — Animated 9:16 captions & overlays for CLIP MASTER",
+  "scripts": {
+    "studio": "npx remotion studio src/Root.tsx",
+    "render": "npx remotion render src/Root.tsx Short01 ../outputs/SHORT_01_remotion.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.545",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.0"
+  }
+}
