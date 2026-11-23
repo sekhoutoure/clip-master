@@ -1535,7 +1535,7 @@ body {
 }
 
 /* =========================================================================
-   TRACKED mode (YOLO crop + facecam inset)
+   TRACKED mode (followed crop + facecam inset)
    ========================================================================= */
 .tracked-bar {
   display: flex;

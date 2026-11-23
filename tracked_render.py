@@ -1,7 +1,7 @@
-"""Tracked 9:16 renderer: YOLO subject tracking, facecam inset, word-pop captions, loudness-normalised export.
+"""Tracked 9:16 renderer: subject tracking, facecam inset, word-pop captions, loudness-normalised export.
 
 Pipeline (two passes):
-  1. analyse_segment()      YOLO person boxes every N frames, scene cuts, automatic facecam detection,
+  1. analyse_segment()      subject boxes every N frames, scene cuts, automatic facecam detection,
                             per-scene smoothed crop position (median + gaussian + dead-zone + speed clamp)
   2. render_tracked_video() composes 1080x1920 frames: tracked gameplay crop + optional facecam inset on top
   3. render_tracked_short() burns word-timed captions (ASS), applies 2-pass loudnorm (-14 LUFS / TP -1.5)
@@ -34,8 +34,8 @@ DEFAULT_OPTIONS: dict[str, Any] = {
     "strict": False,           # when True, a failed QC marks the export as REJECTED
     "facecam_inset": True,     # detect the facecam and show it on top of the 9:16 frame
     "inset_width": 0.46,       # facecam width as a fraction of the output width
-    "tracked_crop": True,      # follow the main subject (YOLO); otherwise static crop_x
-    "yolo_stride": 2,          # run YOLO every N output frames (interpolated in between)
+    "tracked_crop": True,      # follow the main subject; otherwise static crop_x
+    "yolo_stride": 2,          # run subject detection every N output frames (interpolated in between)
     "censor_captions": False,  # remove profanity from burned captions (audio untouched)
     "censor_mode": "remove",   # remove | mask
     "caption_color": "FFE600",
@@ -323,7 +323,7 @@ class _FrameReader:
 
 def analyse_segment(src: Path, s_t: float, e_t: float, project: dict[str, Any], stride: int = 2,
                     weights: Path | None = None, progress: Callable[[int, str], None] | None = None) -> dict[str, Any]:
-    """Pass 1: YOLO person boxes every `stride` output frames, scene cuts, facecam rect, smoothed crop x0."""
+    """Pass 1: subject boxes every `stride` output frames, scene cuts, facecam rect, smoothed crop x0."""
     rd = _FrameReader(src, s_t, e_t)
     W, H, n = rd.W, rd.H, rd.n_out
     model = None
@@ -356,9 +356,9 @@ def analyse_segment(src: Path, s_t: float, e_t: float, project: dict[str, Any], 
             except Exception:
                 dets[j] = []
         if progress and j % 60 == 0:
-            progress(int(100 * j / n), f"YOLO tracking {j}/{n} frames")
+            progress(int(100 * j / n), f"Suivi du sujet {j}/{n} images")
 
-    # Facecam: YOLO static-person-near-edge + border snap (box method), else BlazeFace box from 03 / TRACK
+    # Facecam: static-person-near-edge + border snap, else the facecam box from 03 / TRACK
     cam = _find_facecam([d for d in dets if d is not None], W, H) if model is not None else None
     cam_src = None
     if cam:
@@ -489,7 +489,7 @@ def render_tracked_short(project: dict[str, Any], src_video: Path, out_path: Pat
     ass_path = work_dir / f"_{stem}_caps.ass"
     p = progress or (lambda pct, msg: None)
     try:
-        p(5, "YOLO tracking + facecam detection")
+        p(5, "Suivi du sujet + détection facecam")
         if opts.get("tracked_crop", True):
             track = analyse_segment(src_video, s_t, e_t, project, stride=int(opts.get("yolo_stride", 2)),
                                     progress=lambda pc, m: p(5 + pc * 0.35, m))

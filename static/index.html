@@ -45,9 +45,9 @@
       <div class="ingest-row">
         <input id="urlInput" type="text" class="mono-input" placeholder="Colle un lien ou un MP4" data-i18n-placeholder="ph.url" />
         <select id="pullEngine" class="mono-select pro-only" title="Moteur">
-          <option value="ytdlp">01 yt-dlp</option>
-          <option value="streamlink">02 streamlink (Live 25s)</option>
-          <option value="twitchdownloader">03 TwitchDownloader (VOD + Chat)</option>
+          <option value="ytdlp" data-i18n="import.engineUrl">Lien (URL)</option>
+          <option value="streamlink" data-i18n="import.engineLive">Live (25 s)</option>
+          <option value="twitchdownloader" data-i18n="import.engineVod">VOD + chat</option>
         </select>
         <button class="btn-outline" id="btnPullUrl" onclick="pullFromUrl()" data-i18n="import.link">Lien</button>
         <label class="btn-outline upload-label">
@@ -62,7 +62,7 @@
       </div>
 
       <div class="preset-bar">
-        <button class="preset-chip" id="presetTracked" onclick="selectQuickPreset('tracked')" title="Suit le sujet (YOLO) et affiche la facecam en haut" data-i18n="style.tracked">Suivi</button>
+        <button class="preset-chip" id="presetTracked" onclick="selectQuickPreset('tracked')" title="Suit le sujet et affiche la facecam en haut" data-i18n="style.tracked">Suivi</button>
         <button class="preset-chip active" id="presetFacecam" onclick="selectQuickPreset('facecam')" data-i18n="style.standard">Standard</button>
         <button class="preset-chip pro-only" id="presetTiktok" onclick="selectQuickPreset('tiktok')">9:16</button>
       </div>
@@ -93,7 +93,7 @@
         <label class="mini-check tracked-master" title="Mode suivi"><input type="checkbox" id="chkTracked" onchange="onTrackedToggle()" /> Suivi</label>
         <label class="mini-check pro-only" title="Un QC raté marque l'export comme rejeté"><input type="checkbox" id="chkTrackedStrict" onchange="onTrackedToggle()" /> QC strict</label>
         <label class="mini-check pro-only"><input type="checkbox" id="chkFacecamInset" checked onchange="onTrackedToggle()" /> Facecam</label>
-        <label class="mini-check pro-only"><input type="checkbox" id="chkTrackCrop" checked onchange="onTrackedToggle()" /> YOLO</label>
+        <label class="mini-check pro-only"><input type="checkbox" id="chkTrackCrop" checked onchange="onTrackedToggle()" /> <span data-i18n="opt.track">Suivi</span></label>
         <label class="mini-check pro-only" title="Retire les gros mots des sous-titres (l'audio n'est pas modifié)"><input type="checkbox" id="chkCensor" onchange="onTrackedToggle()" /> Filtre gros mots</label>
         <select id="censorMode" class="mono-select small pro-only" onchange="onTrackedToggle()">
           <option value="remove">retirer</option>
@@ -114,15 +114,15 @@
           <button class="stage-btn" onclick="runStage('track')">03 / TRACK</button>
           <button class="stage-btn" onclick="runStage('caption')">04 / CAPTION</button>
           <button class="stage-btn" onclick="runStage('ship')">05 / SHIP</button>
-          <label class="mini-check"><input type="checkbox" id="chkSilence" /> auto-editor silence</label>
-          <label class="mini-check"><input type="checkbox" id="chkDemucs" /> Demucs vocals</label>
+          <label class="mini-check"><input type="checkbox" id="chkSilence" /> <span data-i18n="opt.silence">Couper les silences</span></label>
+          <label class="mini-check"><input type="checkbox" id="chkDemucs" /> <span data-i18n="opt.vocals">Séparer la voix</span></label>
           <label class="mini-check"><input type="checkbox" id="chkLossless" /> Trim sans ré-encodage</label>
           <label class="mini-check"><input type="checkbox" id="chkUpscale" /> Netteté +</label>
           <label class="mini-check"><input type="checkbox" id="chkRetention" checked /> Barre rétention + -14 LUFS</label>
           <select id="whisperModel" class="mono-select small">
-            <option value="tiny">Whisper: tiny (rapide)</option>
-            <option value="base">Whisper: base</option>
-            <option value="small">Whisper: small (précis)</option>
+            <option value="tiny" data-i18n="opt.whisperTiny">Transcription : tiny (rapide)</option>
+            <option value="base" data-i18n="opt.whisperBase">Transcription : base</option>
+            <option value="small" data-i18n="opt.whisperSmall">Transcription : small (précis)</option>
           </select>
           <select id="whisperLang" class="mono-select small" title="Langue de transcription">
             <option value="auto">Langue: Auto</option>
@@ -243,7 +243,7 @@
 
               <button class="export-btn" id="btnExport" onclick="runStage('ship')" data-i18n="export">Exporter</button>
               <button class="export-btn secondary pro-only" id="btnBatchExport" onclick="runBatchShip()">Batch 3</button>
-              <button class="export-btn secondary pro-only" id="btnRemotionRender" onclick="runRemotionRender()" style="color:#6366f1;border-color:#6366f1">Remotion</button>
+              <button class="export-btn secondary pro-only" id="btnRemotionRender" onclick="runRemotionRender()" style="color:#6366f1;border-color:#6366f1" data-i18n="export.animated">Sous-titres animés</button>
 
               <div class="seg-meter" id="segMeter">
                 <span></span><span></span><span></span><span></span><span></span>
@@ -273,7 +273,7 @@
                 <button class="cap-mini-btn pro-only" onclick="shiftSelectedCaption(0.2)" title="Décaler +0.2s">+0.2s</button>
                 <button class="cap-mini-btn danger" onclick="deleteSelectedCaption()" title="Supprimer" data-i18n="captions.del">Suppr.</button>
                 <button class="cap-mini-btn pro-only" onclick="downloadSrt()" title="Télécharger SRT">SRT ↓</button>
-                <button class="cap-mini-btn pro-only" onclick="downloadRemotionJson()" title="Exporter JSON Remotion">REMOTION ↓</button>
+                <button class="cap-mini-btn pro-only" onclick="downloadRemotionJson()" title="Exporter JSON" data-i18n="captions.json">JSON ↓</button>
               </div>
             </div>
             <input id="captionInput" type="text" class="caption-text-input" value="NEW CAPTION" oninput="onCaptionEdit(this.value)" />
@@ -390,11 +390,11 @@
       </div>
     </section>
 
-    <!-- THE CLIPPING DESK / 19 TOOLS (MODE PRO) -->
+    <!-- FEATURES DESK (MODE PRO) -->
     <section class="card desk-card pro-only">
       <div class="card-head">
-        <span>THE CLIPPING DESK / <strong>19 TOOLS</strong></span>
-        <span class="pink-sm" id="reposReadySummary">vérification des outils…</span>
+        <span data-i18n="desk.title">Fonctions</span>
+        <span class="pink-sm" id="reposReadySummary" data-i18n="desk.checking">vérification des fonctions…</span>
       </div>
       <div class="repos-grid" id="reposGrid"></div>
     </section>
@@ -413,7 +413,7 @@
   <div class="modal-backdrop hidden" id="repoModal" onclick="closeRepoModal()">
     <div class="modal-card card" onclick="event.stopPropagation()">
       <div class="card-head">
-        <span id="modalRepoTitle">01 yt-dlp</span>
+        <span id="modalRepoTitle">Fonction</span>
         <button class="icon-btn" onclick="closeRepoModal()">&times;</button>
       </div>
       <div class="modal-body" id="modalRepoBody"></div>

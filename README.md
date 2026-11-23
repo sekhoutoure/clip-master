@@ -33,10 +33,10 @@ The installer sets up a virtualenv, the Python packages, FFmpeg and Node.js if y
 
 ## Features
 
-- **Import** from a link (yt-dlp: YouTube, Twitch, X and [many more](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)), a live stream (Streamlink), a Twitch VOD with chat (TwitchDownloader) or a local MP4.
-- **Find the moment**: scene cuts (PySceneDetect), silence removal (auto-editor), highlight picking from audio energy and an optional LLM director.
-- **Track the subject**: MediaPipe finds the facecam, YOLO follows the action; the 9:16 crop follows it with the facecam inset on top.
-- **Captions**: local word-level transcription (faster-whisper), TikTok-style presets, editable in the UI, optional Remotion animated captions.
+- **Import** from a link (YouTube, Twitch, X and [many other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)), a live stream, a Twitch VOD with chat, or a local MP4.
+- **Find the moment**: scene cuts, silence removal, highlight picking from audio energy and an optional LLM director.
+- **Track the subject**: the facecam is detected and the action is followed; the 9:16 crop follows it with the facecam inset on top.
+- **Captions**: local word-level transcription, TikTok-style presets, editable in the UI, optional animated captions.
 - **Export presets** for **TikTok, YouTube Shorts and Instagram Reels**: length cap, caption safe zones, caption styles. 1080×1920, 30 fps, -14 LUFS, built-in quality check.
 - **Batch queue**: paste many links or drop many files; items run one by one, can be cancelled or retried, and survive a restart.
 - **French / English UI** with a toggle, and **automatic subtitle translation** (fr, en, es, de, pt, it, ar).
@@ -46,9 +46,9 @@ The installer sets up a virtualenv, the Python packages, FFmpeg and Node.js if y
 
 | | |
 |---|---|
-| Python | 3.10 to 3.12 (3.13 may lack MediaPipe / PyTorch wheels) |
+| Python | 3.10 to 3.12 (3.13 may lack some vision / PyTorch wheels) |
 | FFmpeg | with libass; the installer can install it, or it falls back to the bundled `imageio-ffmpeg` |
-| Node.js 18+ | optional, only for Remotion animated captions |
+| Node.js 18+ | optional, only for animated captions |
 | Disk / RAM | several GB of disk (much less with the PyTorch CPU build, `--cpu-torch`), 8 GB RAM recommended |
 | Internet | first install only (packages, model weights), then for downloading videos |
 
@@ -127,7 +127,7 @@ The repo ships [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), a Cursor rule
 
 **The install is very large.** Use `--cpu-torch` if you have no GPU.
 
-**A download fails (403, sign-in required).** Update yt-dlp (`pip install -U yt-dlp` in `.venv`), try a direct link, or download the file yourself and upload the MP4.
+**A download fails (403, sign-in required).** Update the downloader (`pip install -U yt-dlp` in `.venv`), try a direct link, or download the file yourself and upload the MP4.
 
 **The badge says "Local · Ollama unavailable".** Start Ollama and run `ollama pull qwen2.5:7b`, or add a Groq key, or set `LLM_PROVIDER=none`.
 

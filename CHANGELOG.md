@@ -4,6 +4,8 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+- UI and in-app messages now use neutral CLIP MASTER feature names. Third-party credits stay in NOTICE.md, the README credits section, and `third_party/`.
+
 ## [0.1.0] - 2026-11-23
 
 First public version of CLIP MASTER.

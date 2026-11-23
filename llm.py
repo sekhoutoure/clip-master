@@ -6,7 +6,7 @@ Mode selection (``LLM_PROVIDER`` in ``.env``):
   ollama -> always local Ollama
   none   -> no LLM at all; heuristics only
 
-Transcription never needs a key: it always runs locally with faster-whisper.
+Transcription never needs a key: it always runs locally.
 """
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def llm_status(probe: bool = True) -> dict[str, Any]:
         "provider": prov,
         "mode": {"groq": "cloud", "ollama": "local", "none": "off"}[prov],
         "key_present": bool(cfg.GROQ_API_KEY),
-        "transcription": "faster-whisper (local)",
+        "transcription": "local",
         "model": "",
         "ready": False,
         "hint": "",

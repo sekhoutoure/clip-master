@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--with-reference", action="store_true")
     d.set_defaults(fn=_doctor)
 
-    i = sub.add_parser("install", help="finish the setup: .env, Remotion, model weights, third-party tools")
+    i = sub.add_parser("install", help="finish the setup: .env, animated captions, model weights, third-party tools")
     i.add_argument("--with-reference", action="store_true")
     i.set_defaults(fn=_install)
 

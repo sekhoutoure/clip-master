@@ -41,15 +41,15 @@ async function init() {
   setUiMode(localStorage.getItem('clipstudio_ui_mode') || 'simple');
   syncQuickPresetUI();
   {
-    const ex = state.repos.filter(r => r.status === 'executed').length;
-    const eq = state.repos.filter(r => r.status === 'equivalent').length;
+    const ready = state.repos.filter(r => r.ready).length;
     const miss = state.repos.filter(r => r.status === 'executed_missing').length;
     logTelemetry(
-      'SYSTEM',
-      `CLIP MASTER en ligne — ${ex} outils tiers actifs, ${eq} moteurs maison${miss ? `, ${miss} outil(s) manquant(s) (voir README)` : ''}.`,
+      t('tel.system'),
+      `CLIP MASTER — ${t('desk.summary', { ready, total: state.repos.length })}` + (miss ? ` (${miss})` : ''),
       miss ? '#f59e0b' : '#0e9f8e',
     );
   }
+  document.addEventListener('langchange', () => { if (state.repos?.length) renderReposDesk(); });
   requestAnimationFrame(renderVerticalLoop);
 }
 
@@ -106,14 +106,13 @@ async function switchProject(pid) {
 }
 
 // ---------------------------------------------------------------------------
-// TOOLS DESK (third-party tools)
+// FEATURES DESK
 // ---------------------------------------------------------------------------
 function renderReposDesk() {
   const grid = document.getElementById('reposGrid');
-  const execCount = state.repos.filter(r => r.status === 'executed').length;
-  const equivCount = state.repos.filter(r => r.status === 'equivalent').length;
+  const readyCount = state.repos.filter(r => r.ready).length;
   document.getElementById('reposReadySummary').textContent =
-    `${execCount} ACTIFS · ${equivCount} MOTEURS MAISON / ${state.repos.length}`;
+    t('desk.summary', { ready: readyCount, total: state.repos.length });
 
   grid.innerHTML = state.repos
     .map(r => {
@@ -121,15 +120,13 @@ function renderReposDesk() {
       const cls = ['repo-cell', r.ready ? 'ready' : '', isActive ? 'active' : ''].join(' ');
       let badge = '';
       if (!isActive) {
-        if (r.integration === 'executed' && r.runtime_ready) {
-          badge = '<span class="repo-check" title="Executed directly">&#10003;</span>';
-        } else if (r.integration === 'equivalent') {
-          badge = '<span class="repo-check" style="color:var(--orange)" title="In-house engine inspired by this tool">&approx;</span>';
+        if (r.ready) {
+          badge = `<span class="repo-check" title="${t('desk.ready')}">&#10003;</span>`;
         }
       }
       return `
         <div class="${cls}" onclick="openRepoModal('${r.id}')">
-          <span><span class="repo-num">${r.id}</span>${r.name}</span>
+          <span><span class="repo-num">${r.id}</span>${t('tool.' + r.id)}</span>
           ${badge}
         </div>
       `;
@@ -140,23 +137,15 @@ function renderReposDesk() {
 function openRepoModal(id) {
   const r = state.repos.find(x => x.id === id);
   if (!r) return;
-  document.getElementById('modalRepoTitle').textContent = `${r.id} ${r.name} — ${r.stage}`;
+  const fname = t('tool.' + r.id);
+  document.getElementById('modalRepoTitle').textContent = `${r.id} ${fname} — ${r.stage}`;
   const runBtn =
     r.stage_key && r.stage_key !== 'pull'
-      ? `<button class="btn-pink" style="margin-top:8px;align-self:flex-start" onclick="closeRepoModal(); runStage('${r.stage_key}')">RUN ${r.stage} NOW</button>`
+      ? `<button class="btn-pink" style="margin-top:8px;align-self:flex-start" onclick="closeRepoModal(); runStage('${r.stage_key}')">${t('desk.run', { stage: r.stage })}</button>`
       : '';
-  const integLabel =
-    r.integration === 'executed'
-      ? 'EXECUTED DIRECTLY ✓'
-      : r.integration === 'equivalent'
-        ? 'IN-HOUSE ENGINE (INSPIRED BY) ≈'
-        : 'NOT AVAILABLE';
   document.getElementById('modalRepoBody').innerHTML = `
-    <div><strong>Role:</strong> ${r.role}</div>
-    <div><strong>Integration:</strong> ${integLabel}</div>
-    <div><strong>Engine Detail:</strong> ${r.engine_note || '-'}</div>
-    <div><strong>GitHub:</strong> <a href="${r.github}" target="_blank">${r.github}</a></div>
-    <div><strong>Runtime Ready:</strong> ${r.runtime_ready ? 'YES ✓' : 'NO'}</div>
+    <div><strong>${t('desk.role')}:</strong> ${r.role}</div>
+    <div><strong>${t('desk.status')}:</strong> ${r.ready ? t('desk.ready') : t('desk.missing')}</div>
     ${runBtn}
   `;
   document.getElementById('repoModal').classList.remove('hidden');
@@ -468,7 +457,7 @@ function addCaptionAtPlayhead() {
   state.selectedCaptionIdx = caps.findIndex(c => c.id === newCap.id);
   renderCaptionsTrack();
   scheduleSave();
-  logTelemetry('11 WhisperX', `Added caption at ${t}s`, '#f59e0b');
+  logTelemetry(t('tel.captions'), `Added caption at ${t}s`, '#f59e0b');
 }
 
 function shiftSelectedCaption(delta) {
@@ -479,7 +468,7 @@ function shiftSelectedCaption(delta) {
   c.end = Number(Math.max(c.start + 0.3, Math.min(dur, c.end + delta)).toFixed(2));
   renderCaptionsTrack();
   scheduleSave();
-  logTelemetry('18 Remotion', `Shifted caption to ${c.start}s–${c.end}s`, '#6366f1');
+  logTelemetry(t('tel.animated'), `Shifted caption to ${c.start}s–${c.end}s`, '#6366f1');
 }
 
 function deleteSelectedCaption() {
@@ -489,18 +478,18 @@ function deleteSelectedCaption() {
   state.selectedCaptionIdx = Math.max(0, state.selectedCaptionIdx - 1);
   renderCaptionsTrack();
   scheduleSave();
-  logTelemetry('11 WhisperX', 'Deleted selected caption block', '#ee1d6c');
+  logTelemetry(t('tel.captions'), 'Deleted selected caption block', '#ee1d6c');
 }
 
 function downloadSrt() {
   if (!state.project) return;
   window.open(`/api/projects/${state.project.id}/srt`, '_blank');
-  logTelemetry('13 auto-subtitle', `Exported ${state.project.id}_captions.srt`, '#0e9f8e');
+  logTelemetry(t('tel.captions'), `Exported ${state.project.id}_captions.srt`, '#0e9f8e');
 }
 
 function downloadRemotionJson() {
   window.open('/api/remotion-json', '_blank');
-  logTelemetry('18 Remotion', 'Exported remotion_captions.json for React composition', '#6366f1');
+  logTelemetry(t('tel.animated'), 'Exported captions JSON', '#6366f1');
 }
 
 function setTrimPoint(edge) {
@@ -559,13 +548,13 @@ function setupKeyboardShortcuts() {
       state.project.highlight.start = Math.min(t, (state.project.highlight.end || 99) - 1);
       updateHighlightUI();
       scheduleSave();
-      logTelemetry('07 ClipsAI', `Set Highlight IN = ${state.project.highlight.start}s`, '#ee1d6c');
+      logTelemetry(t('tel.moments'), `Set Highlight IN = ${state.project.highlight.start}s`, '#ee1d6c');
     } else if (e.key.toLowerCase() === 'o' && state.project) {
       const t = Number((video.currentTime || 0).toFixed(2));
       state.project.highlight.end = Math.max(t, (state.project.highlight.start || 0) + 1);
       updateHighlightUI();
       scheduleSave();
-      logTelemetry('07 ClipsAI', `Set Highlight OUT = ${state.project.highlight.end}s`, '#ee1d6c');
+      logTelemetry(t('tel.moments'), `Set Highlight OUT = ${state.project.highlight.end}s`, '#ee1d6c');
     } else if (e.key.toLowerCase() === 'e' && state.project) {
       runStage('ship');
     }
@@ -1073,7 +1062,7 @@ async function pullFromUrl() {
   const url = document.getElementById('urlInput').value.trim();
   if (!url) return alert(t('msg.needUrl'));
   const engine = document.getElementById('pullEngine').value;
-  setPhaseUI('01 / PULL', 'Starting yt-dlp / streamlink...', ['01', '02']);
+  setPhaseUI('01 / PULL', t('msg.pullStart'), ['01', '02']);
   const res = await fetch('/api/pull', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1316,7 +1305,7 @@ class RealAgentOverlayController {
         this._hideAllExcept([]);
         if (this.badgesEl) {
           this.badgesEl.innerHTML = this.visible
-            ? `<span class="muted" style="font-size:10px">En attente — clique <strong>RUN AI CREW</strong> ou lance une étape pour voir les vrais agents Groq LLM + CV travailler</span>`
+            ? `<span class="muted" style="font-size:10px">${t('agents.wait')}</span>`
             : `<span class="muted" style="font-size:10px">Curseurs masqués — clique REAL AGENTS pour afficher</span>`;
         }
         return;
@@ -1422,7 +1411,7 @@ function setCaptionStyle(style, log = true) {
   }
   document.querySelectorAll('.swatch-btn').forEach(b => b.classList.toggle('active', b.dataset.style === style));
   if (state.project) state.project.caption_style = style;
-  if (log) logTelemetry('18 Remotion', `Caption style set to ${style.toUpperCase()}`, cfg.fg === '#ffffff' ? '#171717' : cfg.fg);
+  if (log) logTelemetry(t('tel.animated'), `Caption style set to ${style.toUpperCase()}`, cfg.fg === '#ffffff' ? '#171717' : cfg.fg);
 }
 
 async function renderPublishPanel() {
@@ -1509,7 +1498,7 @@ function copyViralKit() {
 
 async function runBatchShip() {
   if (!state.project) return alert(t('msg.needSource'));
-  logTelemetry('07 ClipsAI', 'Launching BATCH 3 SHORTS (9:16 H.264)...', '#0e9f8e');
+  logTelemetry(t('tel.moments'), 'Launching BATCH 3 SHORTS (9:16 H.264)...', '#0e9f8e');
   const res = await fetch('/api/stage/batch-ship', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1544,7 +1533,7 @@ function watchShort(filename) {
   vid.src = url;
   modal.classList.remove('hidden');
   vid.play().catch(() => {});
-  logTelemetry('20 FFmpeg', `Previewing 9:16 export ${filename}`, '#0e9f8e');
+  logTelemetry(t('tel.export'), `Previewing 9:16 export ${filename}`, '#0e9f8e');
 }
 
 function closeShortModal() {
@@ -1584,7 +1573,7 @@ async function deleteExport(filename) {
 
 async function runRemotionRender() {
   if (!state.project) return alert(t('msg.needSource'));
-  logTelemetry('18 Remotion', 'Starting React animated Short01 render...', '#6366f1');
+  logTelemetry(t('tel.animated'), 'Starting animated-captions render...', '#6366f1');
   const res = await fetch('/api/stage/remotion', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1603,7 +1592,7 @@ init();
 
 
 // ===========================================================================
-// TRACKED mode: YOLO-followed 9:16 crop · facecam inset on top · optional caption profanity filter · QC
+// TRACKED mode: followed 9:16 crop · facecam inset on top · optional caption profanity filter · QC
 // ===========================================================================
 function getTrackedOptions() {
   const on = document.getElementById('chkTracked')?.checked || false;
@@ -1644,7 +1633,7 @@ async function onTrackedToggle() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tracked_options: opts }),
   });
-  logTelemetry('TRACKED', opts.enabled ? 'Mode suivi ON (crop YOLO + facecam)' : 'Mode suivi OFF', '#1a7a00');
+  logTelemetry('TRACKED', opts.enabled ? t('msg.trackedOn') : t('msg.trackedOff'), '#1a7a00');
 }
 
 function drawTrackedPreview(vw, vh, cw, ch, cx) {

@@ -25,7 +25,7 @@ curl -s -X POST -H "$O" localhost:7866/api/queue-clear            # drop done + 
 curl -s -H "$O" -F file=@clip.mp4 -F 'options={"export_preset":"tiktok"}' localhost:7866/api/queue/upload
 ```
 
-Statuses: `queued`, `running`, `done` (has `output` = file in `outputs/`), `error` (has `error`), `cancelled`. Up to 50 URLs per request, 200 items in total. Cancelling a running item stops it at the next progress tick (the current FFmpeg step finishes first).
+Statuses: `queued`, `running`, `done` (has `output` = file in `outputs/`), `error` (has `error`), `cancelled`. Up to 50 URLs per request, 200 items in total. Cancelling a running item stops it at the next progress tick (the current encode step finishes first).
 
 ## Tips
 

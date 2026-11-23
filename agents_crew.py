@@ -100,49 +100,49 @@ def run_autonomous_agent_crew(
     progress: Callable[[str, int, str, list[str]], None] | None = None,
 ) -> dict[str, Any]:
     """Execute real CV + LLM multi-agent editorial crew on a loaded project:
-    1. Ensure CV cuts (04 PySceneDetect), tracking (08 MediaPipe + 09 YOLOv8n), and transcription (12 faster-whisper) exist.
-    2. Agent 04/05 (Cut & Waveform Analyst): inspects real waveform dead-air & cut density.
-    3. Agent 06 Groq/Ollama LLM Director: analyzes transcript + energy windows, labels moments, picks best highlight & writes viral kit.
-    4. Agent 08/09 (CV Framing Director): sets optimal layout_mode (FACECAM+GAME vs CENTER CROP) and locks crop_x to YOLO subject median.
-    5. Agent 11/18 (Groq LLM Caption Copywriter): rewrites/punches up captions in the highlight window & selects style/font_size.
-    6. Agent 20 FFmpeg (Render Agent): renders the final 9:16 H.264 Short if export_mp4=True.
+    1. Ensure scene cuts, subject tracking and transcription exist.
+    2. Cut & waveform analysis: inspects dead-air and cut density.
+    3. Highlight director (LLM): analyzes transcript + energy windows, labels moments, picks the best highlight and writes a viral kit.
+    4. Framing director: sets layout_mode (FACECAM+GAME vs CENTER CROP) and locks crop_x to the tracked subject.
+    5. Caption copywriter (LLM): punches up captions in the highlight window and selects style/font_size.
+    6. Render: encodes the final 9:16 H.264 Short if export_mp4=True.
     """
     clear_active_agents()
     project = load_project(project_id)
     dur = float(project["info"]["duration"] or 15.0)
-    # Tracked mode (YOLO-followed crop + facecam inset + QC) when enabled in the project's options
+    # Tracked mode (followed crop + facecam inset + QC) when enabled in the project's options
     t_meta = project.get("tracked") or {}
     tracked_mode = bool((t_meta.get("options") or {}).get("enabled"))
 
-    # --- STEP 1: Ensure base CV & Whisper data are computed ---
+    # --- STEP 1: Ensure base cuts, tracking and transcription data are computed ---
     if not project.get("cuts") or not project.get("moments"):
         emit_agent_event(
-            "04", "04 PySceneDetect", "FIND", "orange", "#f59e0b",
-            "#filmstripTrack", "Scanning scene cuts...", "Running ContentDetector on video frames",
-            x_norm=0.35, y_norm=0.5, model="PySceneDetect",
+            "04", "04 Coupes de scène", "FIND", "orange", "#f59e0b",
+            "#filmstripTrack", "Analyse des coupes de scène…", "Détection des changements de plan",
+            x_norm=0.35, y_norm=0.5, model="scene-detect",
         )
         project = stage_02_find(project_id, strip_silence=False, progress=progress)
 
     if not project.get("face_track"):
         emit_agent_event(
-            "08", "08 MediaPipe", "TRACK", "pink", "#ee1d6c",
-            "#faceBox", "Running BlazeFace + YOLOv8n...", "Sampling 16 frames across video",
-            x_norm=0.5, y_norm=0.5, model="BlazeFace+YOLOv8n",
+            "08", "08 Facecam", "TRACK", "pink", "#ee1d6c",
+            "#faceBox", "Détection facecam + suivi du sujet…", "Échantillonnage de 16 images",
+            x_norm=0.5, y_norm=0.5, model="track",
         )
         project = stage_03_track(project_id, progress=progress)
 
     if not project.get("captions"):
         emit_agent_event(
-            "12", "12 faster-whisper", "CAPTION", "pink", "#ee1d6c",
-            "#captionsTrack", "Transcribing word timestamps...", "Running faster-whisper int8 + VAD",
-            x_norm=0.45, y_norm=0.5, model="faster-whisper",
+            "12", "12 Transcription", "CAPTION", "pink", "#ee1d6c",
+            "#captionsTrack", "Transcription mot à mot…", "Modèle local, horodatage par mot",
+            x_norm=0.45, y_norm=0.5, model="transcribe",
         )
         project = stage_04_caption(project_id, model_size="tiny", progress=progress)
 
     project = load_project(project_id)
 
     # --- STEP 2: RMS Waveform Silence & Cut Density Analyst (pure Python RMS) ---
-    llm_provider_label = {"groq": "Groq LLM", "ollama": "Ollama LLM"}.get(_llm.provider(), "Heuristic")
+    llm_provider_label = {"groq": "IA cloud", "ollama": "IA locale"}.get(_llm.provider(), "Heuristique")
     llm_model_name = _llm.llm_status(probe=False)["model"] or "heuristics"
     llm_short = llm_model_name.split("/")[-1]
     wf = project.get("waveform") or [0.5] * 120
@@ -157,7 +157,7 @@ def run_autonomous_agent_crew(
         x_norm=max_idx / max(1, len(wf)), y_norm=0.5, model="RMS-Analyzer",
     )
 
-    # --- STEP 3: Real LLM Highlight Director (Groq / Ollama) ---
+    # --- STEP 3: LLM Highlight Director ---
     if progress:
         progress("02 / FIND", 45, f"06 {llm_provider_label} Director ({llm_model_name}) analyzing transcript & moments...", ["06", "07"])
 
@@ -254,9 +254,9 @@ def run_autonomous_agent_crew(
             x_norm=hl_center_norm, y_norm=0.5, model=llm_model_name,
         )
 
-    # --- STEP 4: Agent 08 MediaPipe & 09 Ultralytics (REAL CV FRAMING DECISION) ---
+    # --- STEP 4: Framing decision from facecam + subject track ---
     if progress:
-        progress("03 / TRACK", 68, "08 MediaPipe & 09 YOLOv8n locking optimal 9:16 framing...", ["08", "09"])
+        progress("03 / TRACK", 68, "Recadrage 9:16 à partir du suivi…", ["08", "09"])
 
     fb = project.get("face_box") or {}
     ft = project.get("face_track") or []
@@ -265,10 +265,10 @@ def run_autonomous_agent_crew(
     yolo_pts = [p for p in hl_pts if p.get("source") == "yolo"]
     opt_crop_x = round(float(sum(p["x"] for p in (yolo_pts or hl_pts)) / max(1, len(yolo_pts or hl_pts))), 3) if hl_pts else 0.50
 
-    # Autonomous layout decision based on real BlazeFace corner detection
+    # Autonomous layout decision based on real facecam corner detection
     if fb.get("detected") and (fb.get("conf") or 0) >= 0.45:
         chosen_layout = "FACECAM + GAME + CAPS"
-        face_thought = f"BlazeFace detected corner webcam (conf={fb.get('conf')}) -> Split-screen mode"
+        face_thought = f"Facecam detected in the corner (conf={fb.get('conf')}) -> Split-screen mode"
     else:
         chosen_layout = "CENTER CROP"
         face_thought = "No corner facecam detected -> Full 9:16 subject-tracked Center Crop"
@@ -278,14 +278,14 @@ def run_autonomous_agent_crew(
     save_project(project_id, project)
 
     emit_agent_event(
-        "09", "09 Ultralytics (YOLOv8n)", "TRACK", "teal", "#0e9f8e",
+        "09", "09 Suivi du sujet", "TRACK", "teal", "#0e9f8e",
         "#monitorWrap",
         f"Crop X={round(opt_crop_x*100,1)}% · {chosen_layout}",
-        f"{face_thought}; YOLO tracked {len(yolo_pts)}/{len(hl_pts)} frames in highlight",
-        x_norm=opt_crop_x, y_norm=0.52, model="YOLOv8n+BlazeFace",
+        f"{face_thought}; subject tracked {len(yolo_pts)}/{len(hl_pts)} frames in highlight",
+        x_norm=opt_crop_x, y_norm=0.52, model="track",
     )
 
-    # --- STEP 5: Real LLM Caption Copywriter + Remotion JSON Sync ---
+    # --- STEP 5: LLM Caption Copywriter + animated-captions JSON sync ---
     if progress:
         progress("04 / CAPTION", 82, f"11 {llm_provider_label} Copywriter ({llm_model_name}) polishing captions...", ["11", "18"])
 
@@ -339,7 +339,7 @@ def run_autonomous_agent_crew(
         project["font_size"] = fs_choice
         save_project(project_id, project)
 
-        # Sync Remotion captions.json under _REMOTION_LOCK
+        # Sync remotion/src/captions.json under _REMOTION_LOCK
         with _REMOTION_LOCK:
             rem_src = REMOTION_DIR / "src"
             rem_src.mkdir(parents=True, exist_ok=True)
@@ -349,7 +349,7 @@ def run_autonomous_agent_crew(
             )
 
         emit_agent_event(
-            "18", "18 Remotion JSON Sync", "CAPTION", "indigo", "#6366f1",
+            "18", "18 Sous-titres animés", "CAPTION", "indigo", "#6366f1",
             ".inspector-card",
             f"Style={style_choice.upper()} · {fs_choice}PX · {len(cap_llm.get('rewritten') or [])} caps polished",
             cap_llm.get("style_reason", "Optimized typography for viral retention"),
@@ -357,20 +357,20 @@ def run_autonomous_agent_crew(
         )
     except Exception as exc:
         emit_agent_event(
-            "18", "18 Remotion JSON Sync", "CAPTION", "indigo", "#6366f1",
+            "18", "18 Sous-titres animés", "CAPTION", "indigo", "#6366f1",
             ".inspector-card", f"Captions synced ({len(captions)} blocks)", str(exc)[:60],
-            x_norm=0.5, y_norm=0.5, model="faster-whisper",
+            x_norm=0.5, y_norm=0.5, model="transcribe",
         )
 
-    # --- STEP 6: Agent 20 FFmpeg (REAL 9:16 H.264 EXPORT) ---
+    # --- STEP 6: 9:16 H.264 export ---
     ship_res = None
     if export_mp4:
         emit_agent_event(
-            "20", "20 FFmpeg", "SHIP", "pink", "#ee1d6c",
+            "20", "20 Export", "SHIP", "pink", "#ee1d6c",
             "#btnExport",
             f"Encoding {hl['start']}s–{min(hl['end'], hl['start']+14):.1f}s ({chosen_layout})...",
             "libx264 1080x1920 + libass + loudnorm -14 LUFS + 48kHz AAC",
-            x_norm=0.5, y_norm=0.5, model="FFmpeg-x264",
+            x_norm=0.5, y_norm=0.5, model="export",
         )
         t_opts = None
         if tracked_mode:
@@ -389,11 +389,11 @@ def run_autonomous_agent_crew(
         )
         exp = ship_res.get("export") or {}
         emit_agent_event(
-            "20", "20 FFmpeg", "SHIP", "pink", "#ee1d6c",
+            "20", "20 Export", "SHIP", "pink", "#ee1d6c",
             ".output-card",
             f"Exported {exp.get('filename')} ({exp.get('size_mb')} MB)",
             f"Verified 1080x1920 9:16 H.264 ({exp.get('duration')}s, 48kHz AAC)",
-            x_norm=0.6, y_norm=0.6, model="FFmpeg-x264",
+            x_norm=0.6, y_norm=0.6, model="export",
         )
         if tracked_mode and exp:
             b_info = exp.get("tracked") or {}
@@ -408,7 +408,7 @@ def run_autonomous_agent_crew(
                 f"QC {'PASS' if qc_pass else 'WARNING'} · {dur_txt} @ {lufs_txt}",
                 f"1080x1920 30fps · TP={qc.get('true_peak_dbfs', -1.5)}dBFS · Freezes: {len(qc.get('freezes', []))}"
                 if qc_pass else f"QC alerts: {', '.join(fails)[:80]}",
-                x_norm=0.65, y_norm=0.65, model="FFmpeg-QC-EBU",
+                x_norm=0.65, y_norm=0.65, model="qc",
             )
 
     final_project = load_project(project_id)

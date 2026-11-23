@@ -161,22 +161,20 @@ def _create_job(kind: str) -> str:
 
 
 _REPO_AGENT_META: dict[str, tuple[str, str, str, str, str]] = {
-    "01": ("01 yt-dlp", "PULL", "pink", "#ee1d6c", ".ingest-bar"),
-    "02": ("02 streamlink", "PULL", "indigo", "#6366f1", "#monitorWrap"),
-    "03": ("03 TwitchDownloader", "PULL", "teal", "#0e9f8e", ".bin-card"),
-    "04": ("04 PySceneDetect", "FIND", "orange", "#f59e0b", "#filmstripTrack"),
-    "05": ("05 auto-editor", "FIND", "indigo", "#6366f1", "#audioTrack"),
-    "06": ("06 LLM (Highlight Director)", "FIND", "pink", "#ee1d6c", "#momentsGrid"),
-    "07": ("07 Window Picker (pipeline.py)", "FIND", "pink", "#ee1d6c", "#highlightBox"),
-    "08": ("08 MediaPipe (BlazeFace)", "TRACK", "pink", "#ee1d6c", "#faceBox"),
-    "09": ("09 Ultralytics (YOLOv8n)", "TRACK", "teal", "#0e9f8e", "#cropBox"),
-    "11": ("11 LLM (Caption Copywriter)", "CAPTION", "orange", "#f59e0b", "#captionInput"),
-    "12": ("12 faster-whisper", "CAPTION", "pink", "#ee1d6c", "#captionsTrack"),
-    "13": ("13 FFmpeg libass (SRT/ASS)", "CAPTION", "teal", "#0e9f8e", ".inspector-card"),
-    "14": ("14 Demucs", "SHIP", "orange", "#f59e0b", "#audioTrack"),
-    "18": ("18 Remotion", "CAPTION", "indigo", "#6366f1", ".inspector-card"),
-    "19": ("19 FFmpeg Stream-Copy", "SHIP", "teal", "#0e9f8e", "#filmstripTrack"),
-    "20": ("20 FFmpeg", "SHIP", "pink", "#ee1d6c", "#btnExport"),
+    "01": ("01 Téléchargement", "PULL", "pink", "#ee1d6c", ".ingest-bar"),
+    "02": ("02 Enregistrement live", "PULL", "indigo", "#6366f1", "#monitorWrap"),
+    "03": ("03 VOD + chat", "PULL", "teal", "#0e9f8e", ".bin-card"),
+    "04": ("04 Coupes de scène", "FIND", "orange", "#f59e0b", "#filmstripTrack"),
+    "05": ("05 Coupe des silences", "FIND", "indigo", "#6366f1", "#audioTrack"),
+    "06": ("06 Directeur de moments", "FIND", "pink", "#ee1d6c", "#momentsGrid"),
+    "07": ("07 Choix de la fenêtre", "FIND", "pink", "#ee1d6c", "#highlightBox"),
+    "08": ("08 Facecam", "TRACK", "pink", "#ee1d6c", "#faceBox"),
+    "09": ("09 Suivi du sujet", "TRACK", "teal", "#0e9f8e", "#cropBox"),
+    "11": ("11 Rédaction des sous-titres", "CAPTION", "orange", "#f59e0b", "#captionInput"),
+    "12": ("12 Transcription", "CAPTION", "pink", "#ee1d6c", "#captionsTrack"),
+    "14": ("14 Séparation de la voix", "SHIP", "orange", "#f59e0b", "#audioTrack"),
+    "18": ("18 Sous-titres animés", "CAPTION", "indigo", "#6366f1", ".inspector-card"),
+    "20": ("20 Export", "SHIP", "pink", "#ee1d6c", "#btnExport"),
 }
 
 
@@ -475,7 +473,7 @@ def api_presets():
 
 @app.get("/api/mode")
 def api_mode():
-    """Active LLM mode (cloud Groq / local Ollama / off) for the UI badge."""
+    """Active LLM mode (cloud / local / off) for the UI badge."""
     return llm.llm_status()
 
 
@@ -769,7 +767,7 @@ def api_health():
         "tools_executed": sum(1 for r in repos if r["status"] == "executed"),
         "tools_executed_missing": sum(1 for r in repos if r["status"] == "executed_missing"),
         "tools_equivalent": sum(1 for r in repos if r["status"] == "equivalent"),
-        "tools_note": "tools_ready = outils tiers exécutés directement. Les moteurs équivalents (réimplémentés) ne sont pas comptés.",
+        "tools_note": "tools_ready = fonctions installées et prêtes à s'exécuter.",
         "projects_count": len(projects),
         "exports_count": len(outputs),
     }

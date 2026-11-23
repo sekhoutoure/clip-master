@@ -124,4 +124,4 @@ def test_translate_rejects_bad_lang_and_empty(monkeypatch):
 def test_mode_endpoint(client, monkeypatch):
     monkeypatch.setattr(llm.urllib.request, "urlopen", _fake_urlopen([]))
     d = client.get("/api/mode").json()
-    assert d["mode"] == "local" and d["transcription"].startswith("faster-whisper")
+    assert d["mode"] == "local" and d["transcription"] == "local"

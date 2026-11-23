@@ -63,4 +63,4 @@ LLM_TIMEOUT = env_int("LLM_TIMEOUT", 120)
 
 # --- Limits ------------------------------------------------------------------
 MAX_UPLOAD_MB = env_int("CLIP_MASTER_MAX_UPLOAD_MB", 2048)
-DOWNLOAD_TIMEOUT = env_int("CLIP_MASTER_DOWNLOAD_TIMEOUT", 1800)  # seconds, yt-dlp / streamlink
+DOWNLOAD_TIMEOUT = env_int("CLIP_MASTER_DOWNLOAD_TIMEOUT", 1800)  # seconds, video download

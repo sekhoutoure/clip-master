@@ -3,7 +3,7 @@
 Instructions for coding agents (Claude Code, Cursor, Codex, Copilot, Aider, ...). Humans: see `README.md`.
 
 CLIP MASTER is a local FastAPI app that turns a long video (URL or file) into a captioned 9:16 Short for
-TikTok, YouTube Shorts or Instagram Reels. Python 3.10-3.12, FFmpeg, optional Node.js (Remotion captions).
+TikTok, YouTube Shorts or Instagram Reels. Python 3.10-3.12, FFmpeg, optional Node.js (animated captions).
 
 ## Install (copy-paste, non-interactive)
 
@@ -45,14 +45,14 @@ Install dev tools with `.venv/bin/python -m pip install -r requirements-dev.txt`
 | File | Role |
 |---|---|
 | `server.py` | FastAPI routes, job runner, CSRF origin guard, batch queue endpoints |
-| `pipeline.py` | Stages: `stage_01_pull`, `02_find`, `03_track`, `04_caption`, `stage_translate`, `05_ship` (+ batch, Remotion) |
-| `tracked_render.py` | "Tracked" mode: YOLO-followed crop, facecam inset, captions, QC |
+| `pipeline.py` | Stages: `stage_01_pull`, `02_find`, `03_track`, `04_caption`, `stage_translate`, `05_ship` (+ batch, animated captions) |
+| `tracked_render.py` | "Tracked" mode: followed crop, facecam inset, captions, QC |
 | `presets.py` | TikTok / YouTube Shorts / Instagram Reels export presets (max length, safe zones, caption styles) |
 | `batch_queue.py` | Persistent queue (`projects/_queue.json`): cancel, retry, resume after restart |
 | `llm.py` | Groq or local Ollama, `translate_captions`, `llm_status` (the "no-key mode") |
 | `agents_crew.py` | LLM "AI crew": highlight director, caption copywriter |
 | `qc.py`, `profanity.py` | Export QC, optional caption filter |
-| `tools_registry.py` | Tool detection (ffmpeg, TwitchDownloaderCLI, model weights) |
+| `tools_registry.py` | Feature detection (encoder, optional VOD+chat CLI, model weights) |
 | `bootstrap.py` | Installer logic + doctor; `third_party/manifest.yml` is its manifest |
 | `clip_master_cli.py` | `clip-master serve | doctor | install` |
 | `static/` | Web UI (`index.html`, `app.js`, `features.js`, `i18n.js`, `i18n/{fr,en}.json`) |

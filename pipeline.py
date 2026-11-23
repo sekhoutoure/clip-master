@@ -117,7 +117,7 @@ def _run_cmd(cmd: list[str], cwd: Path | None = None, timeout: int = 600) -> sub
 
 
 def get_whisper_model(model_size: str, cpu_threads: int | None = None):
-    """Reuse faster-whisper models across jobs (expensive to load on CPU)."""
+    """Reuse the local transcription model across jobs (expensive to load on CPU)."""
     from faster_whisper import WhisperModel
 
     key = f"{model_size}:{cpu_threads or 0}"
@@ -131,10 +131,10 @@ def get_whisper_model(model_size: str, cpu_threads: int | None = None):
 
 
 def get_yolo_model(weights: Path | None = None):
-    """Reuse the YOLOv8n weights across track/render jobs."""
+    """Reuse the subject-tracking weights across track/render jobs."""
     path = Path(weights) if weights is not None else get_yolo_weights_path()
     if not path.exists():
-        # First use: let Ultralytics download the official yolov8n weights into models/
+        # First use: download the official subject-tracking weights into models/
         try:
             from ultralytics.utils.downloads import attempt_download_asset
 
@@ -264,7 +264,7 @@ def load_project(project_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# STAGE 01 / PULL — yt-dlp, streamlink, TwitchDownloader
+# STAGE 01 / PULL — download a URL, record a live stream, or import a local file
 # ---------------------------------------------------------------------------
 def _stage_01_pull_impl(
     source_type: str,
@@ -283,7 +283,7 @@ def _stage_01_pull_impl(
 
     active_repos = ["01", "02", "03"]
     if progress:
-        progress("01 / PULL", 10, "yt-dlp / streamlink. VOD in.", active_repos)
+        progress("01 / PULL", 10, "Import de la source…", active_repos)
 
     source_label = title or "SOURCE_01"
 
@@ -296,7 +296,7 @@ def _stage_01_pull_impl(
         vod_id = m.group(1) if m else None
         if td_exe and vod_id:
             if progress:
-                progress("01 / PULL", 25, f"TwitchDownloaderCLI pulling VOD {vod_id} + chat...", ["03"])
+                progress("01 / PULL", 25, f"Téléchargement de la VOD {vod_id} + chat…", ["03"])
             # Download chat JSON in parallel/first
             chat_json = pdir / "twitch_chat.json"
             _run_cmd([str(td_exe), "chatdownload", "--id", vod_id, "-o", str(chat_json)], timeout=180)
@@ -305,12 +305,12 @@ def _stage_01_pull_impl(
                 timeout=DOWNLOAD_TIMEOUT,
             )
             if res.returncode != 0 or not dest_video.exists():
-                raise RuntimeError(f"TwitchDownloaderCLI failed: {res.stderr[-300:] or res.stdout[-300:]}")
+                raise RuntimeError(f"Téléchargement de la VOD échoué: {res.stderr[-300:] or res.stdout[-300:]}")
             source_label = title or f"TWITCH_VOD_{vod_id}"
         else:
-            # Fallback to yt-dlp for clips/non-VOD URLs
+            # Fallback: download the clip URL with the standard downloader
             if progress:
-                progress("01 / PULL", 25, "TwitchDownloader fallback to yt-dlp for clip URL...", ["01", "03"])
+                progress("01 / PULL", 25, "Repli : téléchargement du clip depuis l'URL…", ["01"])
             ytdlp = _venv_exe("yt-dlp")
             res = _run_cmd(
                 [ytdlp, "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best", "--merge-output-format", "mp4", "--ffmpeg-location", get_ffmpeg_path(), "--no-playlist", "-o", str(dest_video), "--", url],
@@ -321,7 +321,7 @@ def _stage_01_pull_impl(
             source_label = title or "TWITCH_CLIP"
     elif source_type == "streamlink" and url:
         if progress:
-            progress("01 / PULL", 25, f"streamlink recording {record_seconds}s live stream...", ["02"])
+            progress("01 / PULL", 25, f"Enregistrement du live ({record_seconds}s)…", ["02"])
         sl = _venv_exe("streamlink")
         ts_file = pdir / "live.ts"
         cmd = [sl, "-o", str(ts_file), "--", url, "best"]
@@ -336,12 +336,12 @@ def _stage_01_pull_impl(
                 proc.kill()
                 proc.wait(timeout=5)
         if not ts_file.exists() or ts_file.stat().st_size < 1000:
-            raise RuntimeError("streamlink n'a pas pu enregistrer le stream (vérifie que la chaîne est en live).")
+            raise RuntimeError("Impossible d'enregistrer le live (vérifie que la chaîne est en direct).")
         ffmpeg = get_ffmpeg_path()
         remux = _run_cmd([ffmpeg, "-y", "-i", str(ts_file), "-c", "copy", str(dest_video)])
         ts_file.unlink(missing_ok=True)
         if remux.returncode != 0 or not dest_video.exists():
-            raise RuntimeError(f"Remux FFmpeg du stream échoué: {remux.stderr[-300:]}")
+            raise RuntimeError(f"Remux du live échoué: {remux.stderr[-300:]}")
         source_label = "LIVE_STREAM"
     elif url:
         # Avoid downloading multi-hour Twitch VODs whole when no section is given:
@@ -361,7 +361,7 @@ def _stage_01_pull_impl(
             eff_start = _hms(t_sec)
             eff_end = _hms(t_sec + 90)
         if progress:
-            msg = f"yt-dlp : extrait {eff_start} → {eff_end}..." if (eff_start and eff_end) else "yt-dlp downloading VOD / clip..."
+            msg = f"Téléchargement de l'extrait {eff_start} → {eff_end}…" if (eff_start and eff_end) else "Téléchargement de la vidéo…"
             progress("01 / PULL", 25, msg, ["01"])
         ytdlp = _venv_exe("yt-dlp")
         cmd = [
@@ -381,7 +381,7 @@ def _stage_01_pull_impl(
         cmd += ["--", url]
         res = _run_cmd(cmd, timeout=DOWNLOAD_TIMEOUT)
         if res.returncode != 0 or not dest_video.exists():
-            raise RuntimeError(f"yt-dlp a échoué: {res.stderr[-400:]}")
+            raise RuntimeError(f"Téléchargement échoué: {res.stderr[-400:]}")
         source_label = title or "VOD_CLIP"
     else:
         raise ValueError("Fournis une URL ou un fichier vidéo local.")
@@ -451,7 +451,7 @@ def stage_01_pull(
 
 
 # ---------------------------------------------------------------------------
-# STAGE 02 / FIND — PySceneDetect, auto-editor, FunClip, ClipsAI
+# STAGE 02 / FIND — scene and highlight detection
 # ---------------------------------------------------------------------------
 def stage_02_find(
     project_id: str,
@@ -463,10 +463,10 @@ def stage_02_find(
     video_path = pdir / project["video_file"]
     active_repos = ["04", "05", "06", "07"]
 
-    # Optional auto-editor dead air removal FIRST so cuts & scoring match the final trimmed video
+    # Optional silence / dead-air removal FIRST so cuts & scoring match the final trimmed video
     if strip_silence:
         if progress:
-            progress("02 / FIND", 20, "auto-editor stripping dead air & silence...", ["05"])
+            progress("02 / FIND", 20, "Suppression des silences…", ["05"])
         ae = _venv_exe("auto-editor")
         cleaned = pdir / "source_clean.mp4"
         res = _run_cmd([ae, str(video_path), "--margin", "0.2sec", "-o", str(cleaned)], timeout=240)
@@ -478,7 +478,7 @@ def stage_02_find(
             project["waveform"] = extract_waveform(video_path, bars=120)
 
     if progress:
-        progress("02 / FIND", 45, "PySceneDetect scanning scene cuts...", ["04"])
+        progress("02 / FIND", 45, "Analyse des coupes de scène…", ["04"])
 
     cuts: list[dict[str, float]] = []
     try:
@@ -593,15 +593,15 @@ def stage_02_find(
 
 
 # ---------------------------------------------------------------------------
-# STAGE 03 / TRACK — MediaPipe (08) + Ultralytics (09)
+# STAGE 03 / TRACK — facecam detection and subject tracking
 # ---------------------------------------------------------------------------
 def stage_03_track(
     project_id: str,
     progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     """Real tracking:
-    - 08 MediaPipe FaceDetector (BlazeFace) -> facecam box + real detection confidence
-    - 09 Ultralytics YOLOv8n -> gameplay person subject X + real box confidence
+    - facecam box + detection confidence
+    - subject position in the gameplay frame + box confidence
     - Fallback when no detector output: OpenCV edge-energy centroid (flagged as 'saliency').
     No hardcoded confidence values: conf is None when nothing was detected.
     """
@@ -611,7 +611,7 @@ def stage_03_track(
     active_repos = ["08", "09"]
 
     if progress:
-        progress("03 / TRACK", 10, "08 MediaPipe loading BlazeFace detector...", ["08"])
+        progress("03 / TRACK", 10, "Détection de la facecam…", ["08"])
 
     cap = cv2.VideoCapture(str(video_path))
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 1920)
@@ -644,7 +644,7 @@ def stage_03_track(
         yolo_model = None
 
     if progress:
-        progress("03 / TRACK", 30, f"Sampling frames (face={face_engine}, subject={'yolo' if yolo_model else 'saliency'})...", active_repos)
+        progress("03 / TRACK", 30, f"Analyse des images (facecam={'oui' if face_engine != 'none' else 'non'}, suivi={'oui' if yolo_model else 'couleur'})...", active_repos)
 
     sample_count = 16
     corner_faces: list[tuple[float, float, float, float, float]] = []
@@ -658,7 +658,7 @@ def stage_03_track(
         if not ok:
             continue
 
-        # --- 08 MediaPipe: facecam = face outside the central gameplay column
+        # --- Facecam: face outside the central gameplay column
         if face_detector is not None:
             try:
                 rgb = np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -673,7 +673,7 @@ def stage_03_track(
             except Exception:
                 pass
 
-        # --- 09 Ultralytics: gameplay subject center
+        # --- Subject: gameplay subject center
         center_x = None
         conf = None
         source = "saliency"
@@ -771,7 +771,7 @@ def stage_03_track(
         progress(
             "03 / TRACK",
             100,
-            f"{face_msg}. Subject YOLO {yolo_hits}/{len(track_points)} frames. Crop X {mean_crop_x*100:.1f}%",
+            f"{face_msg}. Sujet suivi {yolo_hits}/{len(track_points)} images. Crop X {mean_crop_x*100:.1f}%",
             active_repos,
         )
     return project
@@ -779,7 +779,7 @@ def stage_03_track(
 
 
 # ---------------------------------------------------------------------------
-# STAGE 04 / CAPTION — WhisperX, faster-whisper, auto-subtitle, Remotion
+# STAGE 04 / CAPTION — local transcription, SRT/ASS, optional animated captions
 # ---------------------------------------------------------------------------
 def stage_04_caption(
     project_id: str,
@@ -793,20 +793,20 @@ def stage_04_caption(
     active_repos = ["11", "12", "13", "18"]
 
     if progress:
-        progress("04 / CAPTION", 15, "Extracting audio for faster-whisper / WhisperX...", ["11", "12"])
+        progress("04 / CAPTION", 15, "Extraction de l'audio pour la transcription…", ["12"])
 
     wav_path = pdir / "audio.wav"
     ffmpeg = get_ffmpeg_path()
     ext_res = _run_cmd([ffmpeg, "-y", "-i", str(video_path), "-vn", "-ac", "1", "-ar", "16000", str(wav_path)])
     if ext_res.returncode != 0 or not wav_path.exists() or wav_path.stat().st_size < 44:
         wav_path.unlink(missing_ok=True)
-        raise RuntimeError(f"Extraction audio FFmpeg échouée (pas de piste audio ou erreur): {ext_res.stderr[-250:]}")
+        raise RuntimeError(f"Extraction audio échouée (pas de piste audio ou erreur): {ext_res.stderr[-250:]}")
 
     captions: list[dict[str, Any]] = []
     colors = ["slate", "indigo", "teal", "orange", "pink"]
 
     if progress:
-        progress("04 / CAPTION", 40, f"faster-whisper ({model_size}) word-level timestamps...", ["12"])
+        progress("04 / CAPTION", 40, f"Transcription locale ({model_size}), horodatage mot à mot…", ["12"])
     try:
         model = get_whisper_model(model_size)
         kwargs: dict[str, Any] = {"word_timestamps": True, "vad_filter": True}
@@ -858,18 +858,18 @@ def stage_04_caption(
                 )
     except Exception as exc:
         wav_path.unlink(missing_ok=True)
-        raise RuntimeError(f"Transcription faster-whisper échouée: {exc}") from exc
+        raise RuntimeError(f"Transcription échouée: {exc}") from exc
 
     if progress:
-        progress("04 / CAPTION", 88, "Syncing Remotion React captions & SRT...", ["13", "18"])
+        progress("04 / CAPTION", 88, "Préparation des sous-titres (SRT / composition animée)…", ["18"])
 
-    # Write SRT file (auto-subtitle compatible)
+    # Write SRT file
     srt_lines = []
     for idx, c in enumerate(captions, 1):
         srt_lines.append(f"{idx}\n{_fmt_srt(c['start'])} --> {_fmt_srt(c['end'])}\n{c['text']}\n")
     (pdir / "captions.srt").write_text("\n".join(srt_lines), encoding="utf-8")
 
-    # Sync Remotion captions.json under _REMOTION_LOCK
+    # Sync remotion/src/captions.json under _REMOTION_LOCK
     with _REMOTION_LOCK:
         remotion_src = REMOTION_DIR / "src"
         remotion_src.mkdir(parents=True, exist_ok=True)
@@ -979,7 +979,7 @@ def stage_translate(
     target_lang: str,
     progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
-    """Translate the project's captions with the active LLM (Groq, or local Ollama in no-key mode).
+    """Translate the project's captions with the active LLM (cloud, or local in no-key mode).
 
     Timings are kept. The original text stays in ``text_src`` so a second translation starts from the source.
     """
@@ -1006,9 +1006,9 @@ def stage_translate(
 
 
 # ---------------------------------------------------------------------------
-# STAGE 05 / SHIP — Demucs (14), LosslessCut-style copy trim (19), FFmpeg (20)
-# Slow-mo uses FFmpeg minterpolate (motion-compensated interpolation) + atempo.
-# Sharpen uses FFmpeg unsharp. (Video2X / Practical-RIFE / MoviePy are cloned but not executed.)
+# STAGE 05 / SHIP — optional voice split, stream-copy trim, 9:16 encode
+# Slow-mo uses motion-compensated frame interpolation + atempo.
+# Sharpen uses an unsharp filter.
 # ---------------------------------------------------------------------------
 def _atempo_chain(speed: float) -> str:
     """atempo only accepts 0.5..2.0 per instance -> chain for wider ranges."""
@@ -1149,7 +1149,7 @@ def stage_05_ship(
     video_path = pdir / project["video_file"]
     ffmpeg = get_ffmpeg_path()
     active_repos = ["14", "19", "20"]
-    # Tracked mode (YOLO crop + facecam inset): explicit request options win, else the project's saved options
+    # Tracked mode (followed crop + facecam inset): explicit request options win, else the project's saved options
     t_opts = tracked_render.normalize_options(
         tracked if tracked is not None else ((project.get("tracked") or {}).get("options") or {})
     )
@@ -1181,12 +1181,12 @@ def stage_05_ship(
 
     temp_files: list[Path] = []
 
-    # 19 LosslessCut-style stream-copy trim (keyframe-accurate, no re-encode)
+    # Stream-copy trim (keyframe-accurate, no re-encode)
     working_video = video_path
     seek = True
     if lossless_trim and (s_t > 0.1 or e_t < dur - 0.1):
         if progress:
-            progress("05 / SHIP", 20, "Stream-copy trim (LosslessCut method, -c copy)...", ["19"])
+            progress("05 / SHIP", 20, "Trim sans ré-encodage (copie de flux)…", ["20"])
         trimmed = pdir / "trimmed_lossless.mp4"
         res = _run_cmd([ffmpeg, "-y", "-ss", f"{s_t:.3f}", "-to", f"{e_t:.3f}", "-i", str(video_path), "-c", "copy", str(trimmed)])
         if res.returncode == 0 and trimmed.exists():
@@ -1197,11 +1197,11 @@ def stage_05_ship(
             real = get_video_info(trimmed)["duration"] or (e_t - s_t)
             e_t = s_t + real
 
-    # 14 Demucs vocal isolation (runs on the working clip)
+    # Optional voice isolation (runs on the working clip)
     audio_override = None
     if use_demucs:
         if progress:
-            progress("05 / SHIP", 35, "14 Demucs splitting voice from game music (CPU, can be slow)...", ["14"])
+            progress("05 / SHIP", 35, "Séparation de la voix et de la musique (peut être long)…", ["14"])
         demucs_out = pdir / "demucs_out"
         res = _run_cmd(
             [sys.executable, "-m", "demucs", "--two-stems=vocals", "-n", "htdemucs", "-o", str(demucs_out), str(working_video)],
@@ -1289,7 +1289,7 @@ def stage_05_ship(
         return {"project": project, "export": export_entry}
 
     if progress:
-        msg = f"20 FFmpeg encoding 9:16 H.264 ({(e_t - s_t) / speed:.1f}s"
+        msg = f"Encodage 9:16 H.264 ({(e_t - s_t) / speed:.1f}s"
         msg += f", slow-mo {speed}x + minterpolate" if interp else (f", speed {speed}x" if speed != 1.0 else "")
         progress("05 / SHIP", 55, msg + ")...", ["20"])
 
@@ -1305,7 +1305,7 @@ def stage_05_ship(
         res = _render_vertical(ass_path=None, **common)
         captions_burned = False
         if res.returncode != 0 or not out_path.exists():
-            raise RuntimeError(f"FFmpeg export a échoué: {res.stderr[-500:]}")
+            raise RuntimeError(f"Export 9:16 échoué: {res.stderr[-500:]}")
 
     for tf in temp_files:
         try:
@@ -1391,7 +1391,7 @@ def stage_remotion_render(
     project_id: str,
     progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
-    """18 Remotion: real composition = clean 9:16 highlight video (FFmpeg) + React animated captions on top."""
+    """Animated-caption render: a clean 9:16 highlight clip + React animated captions on top."""
     project = load_project(project_id)
     pdir = PROJECTS_DIR / project_id
     active_repos = ["18", "20"]
@@ -1412,7 +1412,7 @@ def stage_remotion_render(
         base_mp4 = public_dir / "base.mp4"
 
         if progress:
-            progress("05 / SHIP", 10, "20 FFmpeg preparing clean 9:16 base clip for Remotion...", ["20"])
+            progress("05 / SHIP", 10, "Préparation du clip 9:16 de base pour les sous-titres animés…", ["20"])
         split_mode = "FACECAM" in (project.get("layout_mode") or "FACECAM").upper()
         res = _render_vertical(
             project=project, src_video=pdir / project["video_file"], out_path=base_mp4,
@@ -1442,7 +1442,7 @@ def stage_remotion_render(
         )
 
         if progress:
-            progress("05 / SHIP", 40, f"18 Remotion rendering React composition ({duration_frames} frames, 1080x1920)...", active_repos)
+            progress("05 / SHIP", 40, f"Rendu des sous-titres animés ({duration_frames} images, 1080x1920)…", active_repos)
 
         npx_cmd = shutil.which("npx.cmd") or shutil.which("npx") or "npx"
         res = _run_cmd(
@@ -1451,7 +1451,7 @@ def stage_remotion_render(
             timeout=1200,
         )
         if res.returncode != 0 or not out_path.exists():
-            raise RuntimeError(f"Remotion render failed: {(res.stderr or res.stdout)[-500:]}")
+            raise RuntimeError(f"Rendu des sous-titres animés échoué: {(res.stderr or res.stdout)[-500:]}")
 
     export_entry = {
         "filename": out_name,
@@ -1466,7 +1466,7 @@ def stage_remotion_render(
     project.setdefault("exports", []).insert(0, export_entry)
     save_project(project_id, project)
     if progress:
-        progress("05 / SHIP", 100, f"18 REMOTION READY — {out_name} ({export_entry['size_mb']} MB)", active_repos)
+        progress("05 / SHIP", 100, f"SOUS-TITRES ANIMÉS PRÊTS — {out_name} ({export_entry['size_mb']} MB)", active_repos)
     return {"project": project, "export": export_entry}
 
 

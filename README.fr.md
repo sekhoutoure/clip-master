@@ -33,10 +33,10 @@ L'installeur prépare un environnement virtuel, les paquets Python, FFmpeg et No
 
 ## Fonctionnalités
 
-- **Import** depuis un lien (yt-dlp : YouTube, Twitch, X et [beaucoup d'autres](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)), un live (Streamlink), une VOD Twitch avec chat (TwitchDownloader) ou un MP4 local.
-- **Trouver le moment** : coupes de scène (PySceneDetect), suppression des silences (auto-editor), choix du temps fort par énergie audio et directeur LLM optionnel.
-- **Suivre le sujet** : MediaPipe repère la facecam, YOLO suit l'action ; le recadrage 9:16 suit le sujet avec la facecam en incrustation.
-- **Sous-titres** : transcription locale mot à mot (faster-whisper), styles TikTok, modifiables dans l'interface, sous-titres animés Remotion en option.
+- **Import** depuis un lien (YouTube, Twitch, X et [beaucoup d'autres sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)), un live, une VOD Twitch avec chat, ou un MP4 local.
+- **Trouver le moment** : coupes de scène, suppression des silences, choix du temps fort par énergie audio et directeur LLM optionnel.
+- **Suivre le sujet** : la facecam est détectée et l'action est suivie ; le recadrage 9:16 suit le sujet avec la facecam en incrustation.
+- **Sous-titres** : transcription locale mot à mot, styles TikTok, modifiables dans l'interface, sous-titres animés en option.
 - **Préréglages d'export** pour **TikTok, YouTube Shorts et Instagram Reels** : durée max, zones sûres, styles de sous-titres. 1080×1920, 30 i/s, -14 LUFS, contrôle qualité intégré.
 - **File d'attente** : colle plusieurs liens ou dépose plusieurs fichiers ; ils sont traités un par un, annulables, relançables, et reprennent après un redémarrage.
 - **Interface FR / EN** avec bascule, et **traduction automatique des sous-titres** (fr, en, es, de, pt, it, ar).
@@ -46,9 +46,9 @@ L'installeur prépare un environnement virtuel, les paquets Python, FFmpeg et No
 
 | | |
 |---|---|
-| Python | 3.10 à 3.12 (3.13 peut manquer de roues MediaPipe / PyTorch) |
+| Python | 3.10 à 3.12 (3.13 peut manquer de certaines roues vision / PyTorch) |
 | FFmpeg | avec libass ; l'installeur peut l'installer, sinon repli sur `imageio-ffmpeg` |
-| Node.js 18+ | optionnel, seulement pour les sous-titres animés Remotion |
+| Node.js 18+ | optionnel, seulement pour les sous-titres animés |
 | Disque / RAM | plusieurs Go de disque (bien moins avec PyTorch CPU, `--cpu-torch`), 8 Go de RAM conseillés |
 | Internet | à l'installation (paquets, modèles), puis pour télécharger des vidéos |
 
@@ -116,7 +116,7 @@ Le dépôt contient [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), une règ
 
 **L'installation est énorme.** Utilise `--cpu-torch` si tu n'as pas de GPU.
 
-**Un téléchargement échoue (403, connexion requise).** Mets yt-dlp à jour (`pip install -U yt-dlp` dans `.venv`), essaie un lien direct, ou télécharge le fichier toi-même et importe le MP4.
+**Un téléchargement échoue (403, connexion requise).** Mets le téléchargeur à jour (`pip install -U yt-dlp` dans `.venv`), essaie un lien direct, ou télécharge le fichier toi-même et importe le MP4.
 
 **Le badge indique « Local · Ollama indisponible ».** Démarre Ollama et lance `ollama pull qwen2.5:7b`, ou ajoute une clé Groq, ou mets `LLM_PROVIDER=none`.
 

@@ -24,7 +24,7 @@ Goal: a working install that passes `--check`, reached with the fewest steps. Ne
 
 ## Requirements the installer checks
 
-Python 3.10-3.12 (3.13 works but MediaPipe / PyTorch wheels may be missing), FFmpeg with libass (a bundled fallback comes from imageio-ffmpeg), Node.js 18+ only for Remotion, internet for the first run (pip, model weights, TwitchDownloaderCLI).
+Python 3.10-3.12 (3.13 works but some vision / PyTorch wheels may be missing), FFmpeg with libass (a bundled fallback comes from imageio-ffmpeg), Node.js 18+ only for animated captions, internet for the first run (pip, model weights, optional VOD+chat CLI).
 
 ## What it fetches
 
