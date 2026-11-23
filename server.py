@@ -40,7 +40,8 @@ from pipeline import (
     validate_project_id,
 )
 import tracked_render
-from config import BASE_DIR, HOST, PORT
+from config import BASE_DIR, HOST, MAX_UPLOAD_MB, PORT
+import llm
 from tools_registry import check_tools_status
 
 STATIC_DIR = BASE_DIR / "static"
@@ -49,7 +50,7 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app = FastAPI(title="CLIP MASTER — 9:16 clip studio")
 
 ALLOWED_ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}", f"http://{HOST}:{PORT}"}
-MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB hard quota
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024  # hard quota, set CLIP_MASTER_MAX_UPLOAD_MB in .env
 MAX_CONCURRENT_JOBS = 1
 
 app.add_middleware(
@@ -95,8 +96,16 @@ def _load_jobs() -> dict[str, dict[str, Any]]:
     return {}
 
 
-def _persist_jobs() -> None:
+_LAST_PERSIST = 0.0
+
+
+def _persist_jobs(force: bool = True) -> None:
+    """Write the jobs file. Progress ticks pass force=False and are throttled to one write per 2 s."""
+    global _LAST_PERSIST
     with _JOBS_LOCK:
+        if not force and time.time() - _LAST_PERSIST < 2.0:
+            return
+        _LAST_PERSIST = time.time()
         try:
             # Keep last 60 jobs
             items = sorted(JOBS.items(), key=lambda kv: kv[1].get("updated_at", 0), reverse=True)[:60]
@@ -141,11 +150,11 @@ _REPO_AGENT_META: dict[str, tuple[str, str, str, str, str]] = {
     "03": ("03 TwitchDownloader", "PULL", "teal", "#0e9f8e", ".bin-card"),
     "04": ("04 PySceneDetect", "FIND", "orange", "#f59e0b", "#filmstripTrack"),
     "05": ("05 auto-editor", "FIND", "indigo", "#6366f1", "#audioTrack"),
-    "06": ("06 Groq LLM (Highlight Director)", "FIND", "pink", "#ee1d6c", "#momentsGrid"),
+    "06": ("06 LLM (Highlight Director)", "FIND", "pink", "#ee1d6c", "#momentsGrid"),
     "07": ("07 Window Picker (pipeline.py)", "FIND", "pink", "#ee1d6c", "#highlightBox"),
     "08": ("08 MediaPipe (BlazeFace)", "TRACK", "pink", "#ee1d6c", "#faceBox"),
     "09": ("09 Ultralytics (YOLOv8n)", "TRACK", "teal", "#0e9f8e", "#cropBox"),
-    "11": ("11 Groq LLM (Caption Copywriter)", "CAPTION", "orange", "#f59e0b", "#captionInput"),
+    "11": ("11 LLM (Caption Copywriter)", "CAPTION", "orange", "#f59e0b", "#captionInput"),
     "12": ("12 faster-whisper", "CAPTION", "pink", "#ee1d6c", "#captionsTrack"),
     "13": ("13 FFmpeg libass (SRT/ASS)", "CAPTION", "teal", "#0e9f8e", ".inspector-card"),
     "14": ("14 Demucs", "SHIP", "orange", "#f59e0b", "#audioTrack"),
@@ -169,7 +178,7 @@ def _update_job(jid: str, stage: str, percent: int, message: str, active_repos: 
                 "updated_at": time.time(),
             }
         )
-        _persist_jobs()
+        _persist_jobs(force=False)
     # Drive real backend agent cursor events from live pipeline progress (outside the jobs lock)
     x_prog = max(0.15, min(0.85, (percent or 20) / 100.0))
     for i, rid in enumerate(repos[:3]):
@@ -218,12 +227,12 @@ def _run_bg(jid: str, fn, *args, **kwargs) -> None:
 
 
 class PullRequest(BaseModel):
-    url: str
-    source_type: str = "ytdlp"  # ytdlp | streamlink
-    title: str | None = None
-    clip_start: str | None = None
-    clip_end: str | None = None
-    record_seconds: int = 25
+    url: str = Field(max_length=2048)
+    source_type: Literal["ytdlp", "streamlink", "twitchdownloader"] = "ytdlp"
+    title: str | None = Field(default=None, max_length=120)
+    clip_start: str | None = Field(default=None, max_length=16)
+    clip_end: str | None = Field(default=None, max_length=16)
+    record_seconds: int = Field(default=25, ge=5, le=120)
 
 
 class StageFindRequest(BaseModel):
@@ -285,7 +294,7 @@ class FullPipelineRequest(BaseModel):
 
 
 class UpdateProjectRequest(BaseModel):
-    captions: list[dict[str, Any]] | None = None
+    captions: list[dict[str, Any]] | None = Field(default=None, max_length=2000)
     crop_x: float | None = Field(default=None, ge=0.05, le=0.95)
     font_size: int | None = Field(default=None, ge=16, le=96)
     layout_mode: str | None = Field(default=None, max_length=40)
@@ -309,6 +318,12 @@ def api_agents_run(req: AgentCrewRequest):
     jid = _create_job("agent_crew")
     _run_bg(jid, run_autonomous_agent_crew, project_id=req.project_id, export_mp4=req.export_mp4)
     return {"job_id": jid}
+
+
+@app.get("/api/mode")
+def api_mode():
+    """Active LLM mode (cloud Groq / local Ollama / off) for the UI badge."""
+    return llm.llm_status()
 
 
 @app.get("/api/repos")
@@ -415,7 +430,7 @@ async def api_upload(file: UploadFile = File(...), title: str = Form(default="SO
                     break
                 written += len(chunk)
                 if written > MAX_UPLOAD_BYTES:
-                    raise HTTPException(status_code=413, detail="Fichier trop volumineux (limite 500 Mo)")
+                    raise HTTPException(status_code=413, detail=f"Fichier trop volumineux (limite {MAX_UPLOAD_MB} Mo)")
                 f.write(chunk)
         jid = _create_job("upload")
     except Exception:
@@ -534,13 +549,23 @@ def api_viral_kit(project_id: str):
 
 
 @app.post("/api/open-outputs")
-def api_open_outputs():
-    import os
+def api_open_outputs(request: Request):
+    """Open the outputs folder in the OS file manager (only for a browser running on this machine)."""
+    import subprocess
+    import sys
+
+    if (request.client.host if request.client else "") not in ("127.0.0.1", "::1", "localhost", "testclient"):
+        raise HTTPException(status_code=403, detail="Only available from the local machine")
+    path = str(OUTPUTS_DIR)
     try:
-        os.startfile(str(OUTPUTS_DIR))
-        return {"ok": True, "path": str(OUTPUTS_DIR)}
+        if sys.platform.startswith("win"):
+            os.startfile(path)  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", path],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {"ok": True, "path": path}
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "path": str(OUTPUTS_DIR)}
+        return {"ok": False, "error": str(exc), "path": path}
 
 
 @app.delete("/api/projects/{project_id}")

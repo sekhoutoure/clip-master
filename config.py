@@ -48,11 +48,19 @@ BIN_DIR = env_path("CLIP_MASTER_BIN_DIR", BASE_DIR / "bin")
 FFMPEG_PATH = env_str("FFMPEG_PATH")
 TWITCHDOWNLOADER_CLI = env_str("TWITCHDOWNLOADER_CLI")
 
-# --- LLM (agents). Groq if GROQ_API_KEY is set, otherwise a local Ollama server --
+# --- LLM (AI crew + subtitle translation) ------------------------------------
+# LLM_PROVIDER: auto (default) -> Groq if GROQ_API_KEY is set, otherwise local Ollama ("no-key mode")
+#               groq | ollama | none (force a mode; "none" disables every LLM call)
+LLM_PROVIDER = env_str("LLM_PROVIDER", "auto").lower()
 GROQ_API_KEY = env_str("GROQ_API_KEY")
 GROQ_URL = env_str("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
 GROQ_MODEL_SMALL = env_str("GROQ_MODEL_SMALL", "qwen/qwen3.8-27b")
 GROQ_MODEL_BIG = env_str("GROQ_MODEL_BIG", "openai/gpt-oss-120b")
-OLLAMA_URL = env_str("OLLAMA_URL", "http://localhost:11434/api/chat")
-OLLAMA_MODEL = env_str("MODEL_SMALL", "qwen2.5:7b")
+# OLLAMA_URL may be the server root (http://localhost:11434) or the full /api/chat URL.
+OLLAMA_URL = env_str("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = env_str("OLLAMA_MODEL") or env_str("MODEL_SMALL", "qwen2.5:7b")
 LLM_TIMEOUT = env_int("LLM_TIMEOUT", 120)
+
+# --- Limits ------------------------------------------------------------------
+MAX_UPLOAD_MB = env_int("CLIP_MASTER_MAX_UPLOAD_MB", 2048)
+DOWNLOAD_TIMEOUT = env_int("CLIP_MASTER_DOWNLOAD_TIMEOUT", 1800)  # seconds, yt-dlp / streamlink

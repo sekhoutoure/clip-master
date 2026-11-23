@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 
 import tracked_render
-from config import BASE_DIR, BIN_DIR, MODELS_DIR, OUTPUTS_DIR, PROJECTS_DIR
+from config import BASE_DIR, BIN_DIR, DOWNLOAD_TIMEOUT, MODELS_DIR, OUTPUTS_DIR, PROJECTS_DIR
 from tools_registry import ensure_face_model, get_ffmpeg_path, get_twitch_cli, get_yolo_weights_path
 
 REMOTION_DIR = BASE_DIR / "remotion"
@@ -71,12 +71,34 @@ ProgressCallback = Callable[[str, int, str, list[str]], None]
 
 
 def _venv_exe(name: str) -> str:
+    """Locate a CLI installed next to the running Python (venv Scripts/bin), else on PATH."""
     scripts_dir = Path(sys.executable).parent
-    cand = scripts_dir / f"{name}.exe"
-    if cand.exists():
-        return str(cand)
-    found = shutil.which(name)
-    return found or name
+    for cand in (scripts_dir / f"{name}.exe", scripts_dir / name):
+        if cand.exists():
+            return str(cand)
+    return shutil.which(name) or name
+
+
+_URL_RE = re.compile(r"^https?://[^\s\x00-\x1f\"'<>`|;&$\\]+$", re.I)
+_TIME_RE = re.compile(r"^\d{1,5}(?::\d{1,2}){0,2}(?:\.\d{1,3})?$")
+
+
+def validate_source_url(url: str | None) -> str:
+    """Only plain http(s) URLs are accepted: no option-looking values, no whitespace or shell characters."""
+    u = (url or "").strip()
+    if not u or len(u) > 2048 or not _URL_RE.match(u):
+        raise ValueError("URL invalide : utilise un lien http(s) complet, sans espaces.")
+    return u
+
+
+def validate_time_spec(value: str | None) -> str | None:
+    """Accept SS, MM:SS or HH:MM:SS (optionally with .mmm); reject anything else."""
+    if value is None or str(value).strip() == "":
+        return None
+    v = str(value).strip()
+    if not _TIME_RE.match(v):
+        raise ValueError(f"Horodatage invalide : {value!r} (attendu SS, MM:SS ou HH:MM:SS).")
+    return v
 
 
 def _run_cmd(cmd: list[str], cwd: Path | None = None, timeout: int = 600) -> subprocess.CompletedProcess:
@@ -243,7 +265,7 @@ def load_project(project_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # STAGE 01 / PULL — yt-dlp, streamlink, TwitchDownloader
 # ---------------------------------------------------------------------------
-def stage_01_pull(
+def _stage_01_pull_impl(
     source_type: str,
     url: str | None = None,
     local_file: Path | None = None,
@@ -279,7 +301,7 @@ def stage_01_pull(
             _run_cmd([str(td_exe), "chatdownload", "--id", vod_id, "-o", str(chat_json)], timeout=180)
             res = _run_cmd(
                 [str(td_exe), "videodownload", "--id", vod_id, "-o", str(dest_video), "--ffmpeg-path", get_ffmpeg_path()],
-                timeout=300,
+                timeout=DOWNLOAD_TIMEOUT,
             )
             if res.returncode != 0 or not dest_video.exists():
                 raise RuntimeError(f"TwitchDownloaderCLI failed: {res.stderr[-300:] or res.stdout[-300:]}")
@@ -290,8 +312,8 @@ def stage_01_pull(
                 progress("01 / PULL", 25, "TwitchDownloader fallback to yt-dlp for clip URL...", ["01", "03"])
             ytdlp = _venv_exe("yt-dlp")
             res = _run_cmd(
-                [ytdlp, "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best", "--merge-output-format", "mp4", "--ffmpeg-location", get_ffmpeg_path(), "-o", str(dest_video), url],
-                timeout=300,
+                [ytdlp, "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best", "--merge-output-format", "mp4", "--ffmpeg-location", get_ffmpeg_path(), "--no-playlist", "-o", str(dest_video), "--", url],
+                timeout=DOWNLOAD_TIMEOUT,
             )
             if res.returncode != 0 or not dest_video.exists():
                 raise RuntimeError(f"Twitch pull failed: {res.stderr[-300:]}")
@@ -301,7 +323,7 @@ def stage_01_pull(
             progress("01 / PULL", 25, f"streamlink recording {record_seconds}s live stream...", ["02"])
         sl = _venv_exe("streamlink")
         ts_file = pdir / "live.ts"
-        cmd = [sl, url, "best", "-o", str(ts_file)]
+        cmd = [sl, "-o", str(ts_file), "--", url, "best"]
         proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **_popen_kwargs())
         try:
             time.sleep(max(5, min(record_seconds, 120)))
@@ -355,8 +377,8 @@ def stage_01_pull(
         ]
         if eff_start and eff_end:
             cmd += ["--download-sections", f"*{eff_start}-{eff_end}"]
-        cmd.append(url)
-        res = _run_cmd(cmd, timeout=300)
+        cmd += ["--", url]
+        res = _run_cmd(cmd, timeout=DOWNLOAD_TIMEOUT)
         if res.returncode != 0 or not dest_video.exists():
             raise RuntimeError(f"yt-dlp a échoué: {res.stderr[-400:]}")
         source_label = title or "VOD_CLIP"
@@ -394,6 +416,37 @@ def stage_01_pull(
     if progress:
         progress("01 / PULL", 100, f"Source ready ({info['duration']}s, {info['width']}x{info['height']})", active_repos)
     return project
+
+
+def stage_01_pull(
+    source_type: str,
+    url: str | None = None,
+    local_file: Path | None = None,
+    title: str | None = None,
+    clip_start: str | None = None,
+    clip_end: str | None = None,
+    record_seconds: int = 30,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    """Validate the inputs, then import a source. A failed import leaves no half-built project behind."""
+    if source_type not in ("ytdlp", "streamlink", "twitchdownloader", "local"):
+        raise ValueError(f"Type de source inconnu : {source_type!r}")
+    if source_type != "local":
+        url = validate_source_url(url)
+    clip_start, clip_end = validate_time_spec(clip_start), validate_time_spec(clip_end)
+    title = (title or "").strip()[:120] or None
+    record_seconds = max(5, min(int(record_seconds or 30), 120))
+    before = {p.name for p in PROJECTS_DIR.iterdir()} if PROJECTS_DIR.exists() else set()
+    try:
+        return _stage_01_pull_impl(
+            source_type, url=url, local_file=local_file, title=title, clip_start=clip_start,
+            clip_end=clip_end, record_seconds=record_seconds, progress=progress,
+        )
+    except BaseException:
+        for p in PROJECTS_DIR.iterdir():
+            if p.name not in before and p.is_dir() and not (p / "project.json").exists():
+                shutil.rmtree(p, ignore_errors=True)
+        raise
 
 
 # ---------------------------------------------------------------------------
