@@ -93,7 +93,7 @@ def get_live_agent_state(since_seq: int = 0) -> dict[str, Any]:
         "events": events,
         "llm_provider": _llm.provider(),
         "llm_model": _llm.llm_status(probe=False)["model"],
-        "llm_ready": _llm.llm_status()["ready"],
+        "llm_ready": _llm.llm_status(probe=False)["ready"],
     }
 
 

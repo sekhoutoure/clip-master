@@ -1,3 +1,4 @@
+@font-face { font-family: 'Anton'; src: url('/fonts/Anton-Regular.ttf') format('truetype'); font-display: swap; }
 :root {
   --bg: #f3f2eb;
   --card: #faf9f4;
@@ -1976,3 +1977,28 @@ body.ui-simple .step-title {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* --- export presets, AI mode badge, batch queue ------------------------- */
+.llm-badge { font-family: var(--font-mono); font-size: 11px; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--border, #ddd); white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.llm-badge.ok { color: #0a7a6a; border-color: #0e9f8e; }
+.llm-badge.warn { color: #b45309; border-color: #f59e0b; }
+.llm-badge.off { color: #6b7280; }
+.export-row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; margin: 8px 0 4px; }
+.mini-label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-family: var(--font-mono); }
+.export-hint { font-size: 11px; align-self: center; }
+.queue-card textarea { width: 100%; resize: vertical; }
+.queue-add-btns { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+.queue-hint { font-size: 11px; margin: 0 0 6px; }
+.queue-list { display: flex; flex-direction: column; gap: 8px; }
+.queue-item { border: 1px solid var(--border, #e5e5e5); border-radius: 8px; padding: 8px 10px; }
+.queue-item-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.queue-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-status { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; }
+.queue-item.st-error .queue-status { color: #dc2626; }
+.queue-item.st-done .queue-status { color: #0a7a6a; }
+.queue-bar { height: 4px; background: #eee; border-radius: 2px; margin: 6px 0; overflow: hidden; }
+.queue-bar > div { height: 100%; background: #0e9f8e; transition: width .3s; }
+.queue-msg { font-size: 11px; word-break: break-word; }
+.queue-actions { display: flex; gap: 6px; margin-top: 6px; }
+.queue-actions a { text-decoration: none; }

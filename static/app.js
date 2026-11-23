@@ -70,7 +70,7 @@ async function refreshProjectsList(selectedId = null) {
     if (!list.length) {
       const opt = document.createElement('option');
       opt.value = '';
-      opt.textContent = 'Nouveau projet';
+      opt.textContent = t('project.new');
       sel.appendChild(opt);
     } else {
       for (const p of list) {
@@ -509,11 +509,11 @@ function setTrimPoint(edge) {
   if (edge === 'in') {
     state.project.highlight.start = Math.min(t, (state.project.highlight.end || 99) - 1);
     logTelemetry('TRIM', `Highlight IN = ${state.project.highlight.start}s`, '#ee1d6c');
-    showToast(`Début fixé à ${state.project.highlight.start}s`);
+    showToast(t('msg.inSet', { v: state.project.highlight.start }));
   } else {
     state.project.highlight.end = Math.max(t, (state.project.highlight.start || 0) + 1);
     logTelemetry('TRIM', `Highlight OUT = ${state.project.highlight.end}s`, '#ee1d6c');
-    showToast(`Fin fixée à ${state.project.highlight.end}s`);
+    showToast(t('msg.outSet', { v: state.project.highlight.end }));
   }
   updateHighlightUI();
   scheduleSave();
@@ -1003,7 +1003,7 @@ async function extractJobId(res, label = 'Job') {
           ? body.detail.map(d => d.msg || JSON.stringify(d)).join('; ')
           : `HTTP ${res.status}`;
     logTelemetry('API', `${label} refusé (${res.status}): ${detail}`, '#ee1d6c');
-    alert(`${label} refusé (${res.status}): ${detail}`);
+    alert(t('msg.refused', { label, status: res.status, detail }));
     return null;
   }
   return body.job_id;
@@ -1059,7 +1059,7 @@ async function pollJob(jobId, onDone) {
               .catch(() => {});
           }
         } else {
-          alert(`Pipeline error: ${job.error}`);
+          alert(t('msg.pipelineError', { err: job.error }));
         }
       }
     } catch {
@@ -1071,7 +1071,7 @@ async function pollJob(jobId, onDone) {
 
 async function pullFromUrl() {
   const url = document.getElementById('urlInput').value.trim();
-  if (!url) return alert('Colle une URL YouTube / Twitch / X.');
+  if (!url) return alert(t('msg.needUrl'));
   const engine = document.getElementById('pullEngine').value;
   setPhaseUI('01 / PULL', 'Starting yt-dlp / streamlink...', ['01', '02']);
   const res = await fetch('/api/pull', {
@@ -1133,7 +1133,7 @@ function pollJobPromise(jobId) {
 }
 
 async function runStage(stage) {
-  if (!state.project) return alert('Charge d’abord une source (URL ou Upload MP4).');
+  if (!state.project) return alert(t('msg.needSource'));
   const pid = state.project.id;
   let endpoint = `/api/stage/${stage}`;
   let payload = { project_id: pid };
@@ -1160,6 +1160,7 @@ async function runStage(stage) {
       start_sec: hl.start,
       end_sec: hl.end,
       tracked: getTrackedOptions(),
+      export_preset: selectedExportPreset(),
     };
   }
 
@@ -1177,7 +1178,7 @@ async function runStage(stage) {
 }
 
 async function runFullPipeline() {
-  if (!state.project) return alert('Charge d’abord une source (URL ou Upload MP4).');
+  if (!state.project) return alert(t('msg.needSource'));
   const res = await fetch('/api/stage/full', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1188,6 +1189,8 @@ async function runFullPipeline() {
       language: document.getElementById('whisperLang')?.value || 'auto',
       layout_mode: state.project.layout_mode || 'FACECAM + GAME + CAPS',
       tracked: getTrackedOptions(),
+      export_preset: selectedExportPreset(),
+      translate_to: selectedTranslateTo(),
     }),
   });
   const jobId = await extractJobId(res, 'BATCH 3 SHORTS');
@@ -1369,7 +1372,7 @@ class RealAgentOverlayController {
 
     try {
       if (!state.project) {
-        alert('Charge d’abord une source (URL ou Upload MP4).');
+        alert(t('msg.needSource'));
         return;
       }
 
@@ -1501,11 +1504,11 @@ function copyViralKit() {
     : `${document.getElementById('viralTitle').textContent}\n\n${document.getElementById('viralTags').textContent}`;
   navigator.clipboard?.writeText(text);
   logTelemetry('VIRAL KIT', 'Titre et hashtags copiés dans le presse-papiers', '#0e9f8e');
-  showToast('Titre + hashtags copiés !', 'ok');
+  showToast(t('msg.titleCopied'), 'ok');
 }
 
 async function runBatchShip() {
-  if (!state.project) return alert('Charge d’abord une source.');
+  if (!state.project) return alert(t('msg.needSource'));
   logTelemetry('07 ClipsAI', 'Launching BATCH 3 SHORTS (9:16 H.264)...', '#0e9f8e');
   const res = await fetch('/api/stage/batch-ship', {
     method: 'POST',
@@ -1519,6 +1522,7 @@ async function runBatchShip() {
       playback_speed: state.playbackSpeed || 1.0,
       upscale_sharpen: document.getElementById('chkUpscale')?.checked || false,
       tracked: getTrackedOptions(),
+      export_preset: selectedExportPreset(),
     }),
   });
   const jobId = await extractJobId(res, 'BATCH 3 SHORTS');
@@ -1579,7 +1583,7 @@ async function deleteExport(filename) {
 }
 
 async function runRemotionRender() {
-  if (!state.project) return alert('Charge d’abord une source.');
+  if (!state.project) return alert(t('msg.needSource'));
   logTelemetry('18 Remotion', 'Starting React animated Short01 render...', '#6366f1');
   const res = await fetch('/api/stage/remotion', {
     method: 'POST',
@@ -1758,7 +1762,7 @@ function setupFileDrop() {
       el.classList.remove('drop-active');
       const file = e.dataTransfer?.files?.[0];
       if (file) {
-        showToast(`Import de ${file.name}…`);
+        showToast(t('msg.importing', { name: file.name }));
         uploadLocalFile({ target: { files: [file] } });
       }
     });

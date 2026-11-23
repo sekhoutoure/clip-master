@@ -837,6 +837,7 @@ def root():
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/fonts", StaticFiles(directory=str(BASE_DIR / "assets" / "fonts")), name="fonts")
 
 
 if __name__ == "__main__":

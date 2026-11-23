@@ -104,3 +104,19 @@ def test_translate_without_captions(project):
     import pytest
     with pytest.raises(ValueError):
         pipeline.stage_translate(project["id"], "fr")
+
+
+def test_i18n_dictionaries_have_same_keys():
+    import json
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "static"
+    fr = json.loads((root / "i18n" / "fr.json").read_text(encoding="utf-8"))
+    en = json.loads((root / "i18n" / "en.json").read_text(encoding="utf-8"))
+    assert fr.keys() == en.keys()
+    html = (root / "index.html").read_text(encoding="utf-8")
+    import re
+    used = set(re.findall(r'data-i18n(?:-title|-placeholder)?="([^"]+)"', html))
+    assert used <= set(fr), used - set(fr)
+    js = (root / "app.js").read_text(encoding="utf-8") + (root / "features.js").read_text(encoding="utf-8")
+    static_keys = {k for k in re.findall(r"\bt\('([\w.]+)'", js) if not k.endswith('.')}
+    assert static_keys <= set(fr), static_keys - set(fr)

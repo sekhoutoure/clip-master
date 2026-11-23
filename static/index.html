@@ -4,9 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CLIP MASTER — Studio Shorts 9:16</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body class="ui-simple">
@@ -18,13 +15,15 @@
         <div class="project-pill">
           <span class="rec-dot"></span>
           <select id="projectSwitcher" class="project-select" onchange="switchProject(this.value)" title="Changer de projet">
-            <option value="">Aucun projet</option>
+            <option value="" data-i18n="top.noProject">Aucun projet</option>
           </select>
           <button class="cap-mini-btn danger" onclick="deleteCurrentProject()" title="Supprimer le projet actif">&#128465;</button>
         </div>
       </div>
       <div class="topbar-actions">
-        <button class="mode-tab" id="btnAvance" onclick="toggleAvance()" title="Outils avancés">Avancé</button>
+        <span class="llm-badge" id="llmBadge" data-i18n-title="mode.tip" title="">&hellip;</span>
+        <button class="mode-tab" id="btnLang" onclick="toggleLang()" title="FR / EN" aria-label="Language">EN</button>
+        <button class="mode-tab" id="btnAvance" onclick="toggleAvance()" title="Outils avancés" data-i18n="top.advanced">Avancé</button>
         <button class="mode-tab sr-only" id="btnUiSimple" onclick="setUiMode('simple')" tabindex="-1">SIMPLE</button>
         <button class="mode-tab sr-only" id="btnUiPro" onclick="setUiMode('pro')" tabindex="-1">PRO</button>
         <button class="agent-toggle pro-only" id="btnAgentsToggle" onclick="toggleAgentsVisible()" title="Agents">
@@ -40,17 +39,17 @@
     <section class="ingest-bar card step-card">
       <div class="step-head">
         <span class="step-num">1</span>
-        <span class="step-title">Importer</span>
+        <span class="step-title" data-i18n="step.import">Importer</span>
       </div>
 
       <div class="ingest-row">
-        <input id="urlInput" type="text" class="mono-input" placeholder="Colle un lien ou un MP4" />
+        <input id="urlInput" type="text" class="mono-input" placeholder="Colle un lien ou un MP4" data-i18n-placeholder="ph.url" />
         <select id="pullEngine" class="mono-select pro-only" title="Moteur">
           <option value="ytdlp">01 yt-dlp</option>
           <option value="streamlink">02 streamlink (Live 25s)</option>
           <option value="twitchdownloader">03 TwitchDownloader (VOD + Chat)</option>
         </select>
-        <button class="btn-outline" id="btnPullUrl" onclick="pullFromUrl()">Lien</button>
+        <button class="btn-outline" id="btnPullUrl" onclick="pullFromUrl()" data-i18n="import.link">Lien</button>
         <label class="btn-outline upload-label">
           MP4
           <input type="file" id="fileUpload" accept="video/*" hidden onchange="uploadLocalFile(event)" />
@@ -59,13 +58,34 @@
 
       <div class="step-head">
         <span class="step-num">2</span>
-        <span class="step-title">Style</span>
+        <span class="step-title" data-i18n="step.style">Style</span>
       </div>
 
       <div class="preset-bar">
-        <button class="preset-chip" id="presetTracked" onclick="selectQuickPreset('tracked')" title="Suit le sujet (YOLO) et affiche la facecam en haut">Suivi</button>
-        <button class="preset-chip active" id="presetFacecam" onclick="selectQuickPreset('facecam')">Standard</button>
+        <button class="preset-chip" id="presetTracked" onclick="selectQuickPreset('tracked')" title="Suit le sujet (YOLO) et affiche la facecam en haut" data-i18n="style.tracked">Suivi</button>
+        <button class="preset-chip active" id="presetFacecam" onclick="selectQuickPreset('facecam')" data-i18n="style.standard">Standard</button>
         <button class="preset-chip pro-only" id="presetTiktok" onclick="selectQuickPreset('tiktok')">9:16</button>
+      </div>
+
+      <div class="export-row">
+        <label class="mini-label"><span data-i18n="export.platform">Plateforme</span>
+          <select id="exportPreset" class="mono-select small" onchange="onExportPresetChange()">
+            <option value="" data-i18n="export.none">Aucune (libre)</option>
+          </select>
+        </label>
+        <label class="mini-label"><span data-i18n="export.translate">Traduire les sous-titres</span>
+          <select id="translateTo" class="mono-select small">
+            <option value="" data-i18n="export.noTranslate">Ne pas traduire</option>
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="de">Deutsch</option>
+            <option value="pt">Português</option>
+            <option value="it">Italiano</option>
+            <option value="ar">العربية</option>
+          </select>
+        </label>
+        <span class="muted export-hint" id="exportHint"></span>
       </div>
 
       <!-- OPTIONS MODE SUIVI (visibles quand « Suivi » est actif ou en mode Pro) -->
@@ -84,7 +104,7 @@
       <!-- OPTIONS AVANCÉES REPLIABLES -->
       <div class="step-head step-create">
         <span class="step-num">3</span>
-        <button class="btn-pink btn-primary-cta" id="btnRunAll" onclick="runFullPipeline()">Créer le Short</button>
+        <button class="btn-pink btn-primary-cta" id="btnRunAll" onclick="runFullPipeline()" data-i18n="create">Créer le Short</button>
       </div>
 
       <details class="advanced-drawer pro-only" id="advancedDrawer">
@@ -118,8 +138,8 @@
     <section class="phase-bar card">
       <div class="phase-row">
         <div class="phase-left">
-          <span class="phase-tag" id="phaseTag">PRÊT</span>
-          <span class="phase-msg" id="phaseMsg">Prêt</span>
+          <span class="phase-tag" id="phaseTag" data-i18n="status.ready">PRÊT</span>
+          <span class="phase-msg" id="phaseMsg" data-i18n="ready.msg">Prêt</span>
         </div>
         <div class="phase-time" id="phaseTime">00.00 / 00.00</div>
       </div>
@@ -141,15 +161,15 @@
       <!-- GAUCHE : VIDÉO SOURCE -->
       <div class="card program-card">
         <div class="card-head">
-          <span>Source · <strong id="programSourceName">Aucune</strong></span>
+          <span><span data-i18n="source.label">Source</span> · <strong id="programSourceName" data-i18n="source.none">Aucune</strong></span>
           <button class="tiny-toggle" id="btnSpeedToggle" onclick="cyclePlaybackSpeed()" title="Vitesse">1.0x</button>
         </div>
 
         <div class="monitor-wrap" id="monitorWrap">
           <video id="mainVideo" playsinline preload="metadata" crossorigin="anonymous"></video>
           <div class="empty-monitor" id="emptyMonitor">
-            <div class="empty-title">Pas de vidéo</div>
-            <div class="empty-sub">Colle un lien ou un MP4</div>
+            <div class="empty-title" data-i18n="video.none">Pas de vidéo</div>
+            <div class="empty-sub" data-i18n="video.hint">Colle un lien ou un MP4</div>
           </div>
 
           <!-- Interactive Overlay Layer -->
@@ -169,7 +189,7 @@
         </div>
 
         <!-- Sous-titre en direct -->
-        <div class="live-caption-strip" id="liveCaptionStrip">Sous-titre</div>
+        <div class="live-caption-strip" id="liveCaptionStrip" data-i18n="caption.live">Sous-titre</div>
 
         <!-- Contrôles de lecture -->
         <div class="transport-bar">
@@ -187,19 +207,19 @@
 
         <!-- Mini-barre de découpe rapide (accessible en mode Simple) -->
         <div class="simple-trim-bar">
-          <button class="cap-mini-btn" onclick="setTrimPoint('in')" title="Début (I)">Début</button>
-          <button class="cap-mini-btn" onclick="setTrimPoint('out')" title="Fin (O)">Fin</button>
+          <button class="cap-mini-btn" onclick="setTrimPoint('in')" title="Début (I)" data-i18n="trim.in">Début</button>
+          <button class="cap-mini-btn" onclick="setTrimPoint('out')" title="Fin (O)" data-i18n="trim.out">Fin</button>
           <span class="trim-pill" id="simpleTrimLabel">0.0s → 15.0s</span>
         </div>
 
         <!-- Moments détectés intégrés sous la vidéo pour garder la colonne droite focalisée -->
         <div class="moments-inline">
           <div class="moments-inline-head">
-            <span class="micro-label">Moments</span>
+            <span class="micro-label" data-i18n="moments">Moments</span>
             <span class="muted" id="cutsCountLabel">0</span>
           </div>
           <div class="moments-grid" id="momentsGrid">
-            <div class="moment-placeholder">Aucun pour l’instant</div>
+            <div class="moment-placeholder" data-i18n="moments.none">Aucun pour l’instant</div>
           </div>
         </div>
       </div>
@@ -209,7 +229,7 @@
         <!-- APERÇU 9:16 & EXPORT (EN HAUT : ACTION PRINCIPALE) -->
         <div class="card output-card">
           <div class="card-head">
-            <span><strong class="step-inline">4</strong> Aperçu</span>
+            <span><strong class="step-inline">4</strong> <span data-i18n="preview">Aperçu</span></span>
             <button class="tiny-toggle" id="btnLayoutToggle" onclick="toggleLayoutMode()">Facecam</button>
           </div>
           <div class="output-body">
@@ -221,7 +241,7 @@
               <div class="muted small-meta">1080&times;1920 &middot; MP4</div>
               <div class="teal-meta" id="outputLayoutLabel">FACECAM + GAME + CAPS</div>
 
-              <button class="export-btn" id="btnExport" onclick="runStage('ship')">Exporter</button>
+              <button class="export-btn" id="btnExport" onclick="runStage('ship')" data-i18n="export">Exporter</button>
               <button class="export-btn secondary pro-only" id="btnBatchExport" onclick="runBatchShip()">Batch 3</button>
               <button class="export-btn secondary pro-only" id="btnRemotionRender" onclick="runRemotionRender()" style="color:#6366f1;border-color:#6366f1">Remotion</button>
 
@@ -240,18 +260,18 @@
         <!-- ÉDITION SIMPLE DES SOUS-TITRES -->
         <div class="card inspector-card">
           <div class="card-head">
-            <span>Sous-titres</span>
+            <span data-i18n="captions">Sous-titres</span>
             <span class="pink-sm pro-only">Clés</span>
           </div>
 
           <div class="caption-edit-box">
             <div class="cap-edit-head">
-              <label class="micro-label">Texte</label>
+              <label class="micro-label" data-i18n="text">Texte</label>
               <div class="cap-mini-actions">
-                <button class="cap-mini-btn" onclick="addCaptionAtPlayhead()" title="Ajouter un sous-titre ici">+ Ajouter</button>
+                <button class="cap-mini-btn" onclick="addCaptionAtPlayhead()" title="Ajouter un sous-titre ici" data-i18n="captions.add">+ Ajouter</button>
                 <button class="cap-mini-btn pro-only" onclick="shiftSelectedCaption(-0.2)" title="Décaler -0.2s">-0.2s</button>
                 <button class="cap-mini-btn pro-only" onclick="shiftSelectedCaption(0.2)" title="Décaler +0.2s">+0.2s</button>
-                <button class="cap-mini-btn danger" onclick="deleteSelectedCaption()" title="Supprimer">Suppr.</button>
+                <button class="cap-mini-btn danger" onclick="deleteSelectedCaption()" title="Supprimer" data-i18n="captions.del">Suppr.</button>
                 <button class="cap-mini-btn pro-only" onclick="downloadSrt()" title="Télécharger SRT">SRT ↓</button>
                 <button class="cap-mini-btn pro-only" onclick="downloadRemotionJson()" title="Exporter JSON Remotion">REMOTION ↓</button>
               </div>
@@ -260,19 +280,19 @@
           </div>
 
           <div class="slider-row">
-            <span class="micro-label">TAILLE</span>
+            <span class="micro-label" data-i18n="size">TAILLE</span>
             <input id="fontSizeSlider" type="range" min="24" max="68" value="40" oninput="onFontSizeChange(this.value)" />
             <span class="orange-val" id="fontSizeVal">40 PX</span>
           </div>
 
           <div class="style-swatches">
-            <span class="micro-label">STYLE</span>
+            <span class="micro-label" data-i18n="style">STYLE</span>
             <button class="swatch-btn" data-style="tiktok_white" onclick="setCaptionStyle('tiktok_white')" style="--sw:#ffffff; color:#000; font-style:italic; font-weight:900" title="Style TikTok: Blanc Italique + Contour Noir">TIKTOK</button>
             <button class="swatch-btn" data-style="tiktok_yellow" onclick="setCaptionStyle('tiktok_yellow')" style="--sw:#ffe600; color:#000; font-style:italic; font-weight:900" title="Style TikTok Jaune">TT JAUNE</button>
-            <button class="swatch-btn active" data-style="pink" onclick="setCaptionStyle('pink')" style="--sw:#ee1d6c">ROSE</button>
-            <button class="swatch-btn" data-style="yellow" onclick="setCaptionStyle('yellow')" style="--sw:#facc15">JAUNE</button>
-            <button class="swatch-btn" data-style="cyan" onclick="setCaptionStyle('cyan')" style="--sw:#06b6d4">CYAN</button>
-            <button class="swatch-btn" data-style="white" onclick="setCaptionStyle('white')" style="--sw:#171717">BLANC</button>
+            <button class="swatch-btn active" data-style="pink" onclick="setCaptionStyle('pink')" style="--sw:#ee1d6c" data-i18n="sw.pink">ROSE</button>
+            <button class="swatch-btn" data-style="yellow" onclick="setCaptionStyle('yellow')" style="--sw:#facc15" data-i18n="sw.yellow">JAUNE</button>
+            <button class="swatch-btn" data-style="cyan" onclick="setCaptionStyle('cyan')" style="--sw:#06b6d4" data-i18n="sw.cyan">CYAN</button>
+            <button class="swatch-btn" data-style="white" onclick="setCaptionStyle('white')" style="--sw:#171717" data-i18n="sw.white">BLANC</button>
           </div>
 
           <div class="track-row pro-only">
@@ -287,23 +307,44 @@
       </div>
     </section>
 
+    <!-- FILE D'ATTENTE (BATCH) -->
+    <section class="card queue-card" id="queueCard">
+      <div class="card-head">
+        <span data-i18n="queue.title">File d’attente</span>
+        <div class="cap-mini-actions">
+          <button class="cap-mini-btn" onclick="clearQueueFinished()" data-i18n="queue.clear">Vider les terminés</button>
+        </div>
+      </div>
+      <p class="muted queue-hint" data-i18n="queue.hint"></p>
+      <div class="queue-add">
+        <textarea id="queueUrls" rows="3" class="mono-input" data-i18n-placeholder="queue.ph" placeholder="https://…"></textarea>
+        <div class="queue-add-btns">
+          <button class="btn-pink" onclick="addQueueUrls()" data-i18n="queue.add">Ajouter à la file</button>
+          <label class="btn-outline upload-label"><span data-i18n="queue.file">Ajouter un MP4</span>
+            <input type="file" id="queueFile" accept="video/*" multiple hidden onchange="addQueueFiles(event)" />
+          </label>
+        </div>
+      </div>
+      <div class="queue-list" id="queueList"><div class="muted" data-i18n="queue.empty">File vide</div></div>
+    </section>
+
     <!-- EXPORTS PRÊTS & TITRE VIRAL -->
     <section class="card publish-card" id="publishCard">
       <div class="card-head">
-        <span>Publier</span>
+        <span data-i18n="publish">Publier</span>
         <div class="cap-mini-actions">
-          <button class="cap-mini-btn" onclick="copyViralKit()">Copier titre</button>
-          <button class="cap-mini-btn" onclick="openOutputsFolder()">Dossier</button>
+          <button class="cap-mini-btn" onclick="copyViralKit()" data-i18n="copyTitle">Copier titre</button>
+          <button class="cap-mini-btn" onclick="openOutputsFolder()" data-i18n="folder">Dossier</button>
         </div>
       </div>
       <div class="publish-grid">
         <div class="viral-kit-box">
-          <div class="micro-label">Titre</div>
+          <div class="micro-label" data-i18n="title">Titre</div>
           <div class="viral-title" id="viralTitle">—</div>
           <div class="viral-tags" id="viralTags">#Shorts</div>
         </div>
         <div class="exports-list" id="exportsList">
-          <div class="muted" style="font-size:11px">Aucun export</div>
+          <div class="muted" style="font-size:11px" data-i18n="exports.none">Aucun export</div>
         </div>
       </div>
     </section>
@@ -400,6 +441,8 @@
   <div class="agent-stage" id="agentStage" aria-hidden="true"></div>
   <div class="toast-host" id="toastHost" aria-live="polite"></div>
 
+  <script src="/static/i18n.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/features.js"></script>
 </body>
 </html>

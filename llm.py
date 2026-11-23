@@ -83,16 +83,16 @@ def llm_status(probe: bool = True) -> dict[str, Any]:
             info["hint"] = "LLM_PROVIDER=groq but GROQ_API_KEY is empty"
     elif prov == "ollama":
         info["model"] = cfg.OLLAMA_MODEL
-        if probe:
-            ok, models = probe_ollama()
-            base = cfg.OLLAMA_MODEL.split(":")[0]
-            has_model = any(m == cfg.OLLAMA_MODEL or m.split(":")[0] == base for m in models)
-            info["ready"] = ok and has_model
-            info["ollama_reachable"] = ok
-            if not ok:
-                info["hint"] = f"Ollama not reachable at {_ollama_root()} (install from ollama.com and start it)"
-            elif not has_model:
-                info["hint"] = f"Run: ollama pull {cfg.OLLAMA_MODEL}"
+        # probe=False reuses the last probe result (used by the 650 ms agents poll: no network call)
+        ok, models = probe_ollama() if probe else (_probe_cache["ok"], list(_probe_cache["models"]))
+        base = cfg.OLLAMA_MODEL.split(":")[0]
+        has_model = any(m == cfg.OLLAMA_MODEL or m.split(":")[0] == base for m in models)
+        info["ready"] = ok and has_model
+        info["ollama_reachable"] = ok
+        if probe and not ok:
+            info["hint"] = f"Ollama not reachable at {_ollama_root()} (install from ollama.com and start it)"
+        elif probe and not has_model:
+            info["hint"] = f"Run: ollama pull {cfg.OLLAMA_MODEL}"
     else:
         info["hint"] = "LLM disabled (LLM_PROVIDER=none): heuristics only"
     return info
