@@ -150,7 +150,7 @@ def test_manifest_is_valid_and_licensed():
         if i["kind"] == "git":
             assert i["ref"] and i.get("default") is False
         if i["kind"] == "binary":
-            for k, v in i.items():
+            for k in i:
                 if k.startswith("asset_"):
                     assert len(i["sha256_" + k[6:]]) == 64
 
