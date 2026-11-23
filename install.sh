@@ -6,17 +6,19 @@
 #   ./install.sh --yes              also install missing system packages (ffmpeg, node) without asking
 #   ./install.sh --with-reference   also fetch the reference-only sources of third_party/manifest.yml
 #   ./install.sh --cpu-torch        install the small CPU-only PyTorch build first (no GPU, ~200 MB instead of ~2 GB)
+#   ./install.sh --locked           install the exact package versions from requirements-lock/ (reproducible; Python 3.12)
 #   ./install.sh --python python3.12   use a specific interpreter
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-CHECK=0; YES=0; REF=0; CPU=0; PY_REQ=""
+CHECK=0; YES=0; REF=0; CPU=0; LOCKED=0; PY_REQ=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --check) CHECK=1 ;;
     --yes|-y) YES=1 ;;
     --with-reference) REF=1 ;;
     --cpu-torch) CPU=1 ;;
+    --locked) LOCKED=1 ;;
     --python) shift; PY_REQ="${1:-}" ;;
     -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
     *) echo "install.sh: unknown option '$1' (try --help)" >&2; exit 2 ;;
@@ -78,7 +80,25 @@ if [ "$CPU" = 1 ] && [ "$(uname -s)" = "Linux" ]; then
   say "CPU-only PyTorch"
   "$VENV_PY" -m pip install --quiet torch torchvision --index-url https://download.pytorch.org/whl/cpu
 fi
-"$VENV_PY" -m pip install -r requirements.txt
+if [ "$LOCKED" = 1 ]; then
+  case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64) LOCK=requirements-lock/linux-x86_64-py312.txt ;;
+    Darwin-arm64) LOCK=requirements-lock/macos-arm64-py312.txt ;;
+    *) LOCK="" ;;
+  esac
+  PYV_NOW="$("$VENV_PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+  if [ -n "$LOCK" ] && [ "$PYV_NOW" = "3.12" ] && [ -f "$LOCK" ]; then
+    say "Pinned packages from $LOCK"
+    # torch / torchvision are not in the lock: they come from --cpu-torch above or from the dependency resolver
+    "$VENV_PY" -m pip install -r "$LOCK"
+    "$VENV_PY" -m pip install -r requirements.txt   # adds torch (+ checks nothing else drifted)
+  else
+    warn "no lock file for this platform / Python $PYV_NOW (locks cover Linux x86_64 and macOS arm64 on Python 3.12): using requirements.txt"
+    "$VENV_PY" -m pip install -r requirements.txt
+  fi
+else
+  "$VENV_PY" -m pip install -r requirements.txt
+fi
 "$VENV_PY" -m pip install --quiet -e . --no-deps 2>&1 | tail -n 3
 
 say "4/5 Models, Remotion, third-party tools"
