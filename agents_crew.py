@@ -1,19 +1,13 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import threading
 import time
-import urllib.request
-from pathlib import Path
 from typing import Any, Callable
 
-import config as _cfg
 
 from pipeline import (
-    BASE_DIR,
-    PROJECTS_DIR,
     REMOTION_DIR,
     _REMOTION_LOCK,
     load_project,

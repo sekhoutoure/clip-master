@@ -717,7 +717,7 @@ def stage_03_track(
     if len(track_points) >= 3:
         xs = np.array([p["x"] for p in track_points], dtype=np.float32)
         sm = np.convolve(np.pad(xs, 1, mode="edge"), np.ones(3) / 3.0, mode="valid")
-        for p, v in zip(track_points, sm):
+        for p, v in zip(track_points, sm, strict=True):
             p["x"] = round(float(v), 3)
 
     if corner_faces:

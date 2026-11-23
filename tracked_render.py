@@ -193,7 +193,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             txt = censor_text(txt, mode)
         if not txt or e <= s:
             continue
-        anim = r"{\an5\pos(540,%d)\fscx72\fscy72\t(0,90,\fscx108\fscy108)\t(90,150,\fscx100\fscy100)}" % y
+        anim = r"{\an5\pos(540," + str(y) + r")\fscx72\fscy72\t(0,90,\fscx108\fscy108)\t(90,150,\fscx100\fscy100)}"
         lines.append(f"Dialogue: 0,{_ts(s)},{_ts(e)},Pop,,0,0,0,,{anim}{txt}")
     out_path.write_text(head + "\n".join(lines) + "\n", encoding="utf-8")
     return len(lines)
@@ -273,7 +273,7 @@ def _smooth(xs, cuts_f, fps, cw, sigma=0.6, maxvel=0.9):
     xs = np.array(xs, float)
     out = np.empty_like(xs)
     bounds = [0] + [c for c in cuts_f if 0 < c < len(xs)] + [len(xs)]
-    for a, b in zip(bounds[:-1], bounds[1:]):
+    for a, b in zip(bounds[:-1], bounds[1:], strict=False):
         seg = xs[a:b]
         if len(seg) > 9:
             seg = median_filter(seg, size=9, mode="nearest")
@@ -383,7 +383,7 @@ def analyse_segment(src: Path, s_t: float, e_t: float, project: dict[str, Any], 
             continue
         cand = [b for b in f if not _inside(b, cam) and (b[3] - b[1]) > 0.08 * H]
         if cand:
-            def cost(b):
+            def cost(b, last=last, prior=prior):
                 cx = (b[0] + b[2]) / 2
                 return abs(cx - last) / W + abs(cx - prior) / W * 0.6 - (b[3] - b[1]) / H * 0.8 - b[4] * 0.3
 

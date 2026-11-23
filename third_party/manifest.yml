@@ -1,0 +1,179 @@
+# CLIP MASTER - third-party tools. Single source of truth read by `install.sh` / `install.ps1` / `clip-master doctor`.
+#
+# kind: pip     -> installed through requirements.txt (listed here for the record: license, purpose)
+#       npm     -> installed by `npm install` in remotion/
+#       system  -> must exist on the machine (the installer checks it and prints how to install it)
+#       binary  -> release archive downloaded into third_party/<name>/ (sha256 checked, pinned tag)
+#       git     -> source cloned into third_party/<name>/ at a pinned tag or commit (shallow). Reference only.
+# default: false  -> only fetched with `--with-reference` (nothing in the app needs them at runtime).
+#
+# Nothing in third_party/ is ever committed (see .gitignore): it is fetched on the user's machine.
+# Not included on purpose: remotion-dev/skills (no license), LosslessCut (GPL-2.0-only, idea only),
+# Video2X (AGPL-3.0, ~1 GB, not used).
+# Keep this file to flat "- key: value" entries (the installer can read it without PyYAML).
+
+- name: yt-dlp
+  kind: pip
+  package: yt-dlp
+  url: https://github.com/yt-dlp/yt-dlp
+  license: Unlicense
+  purpose: Download VODs and clips from almost any site
+
+- name: streamlink
+  kind: pip
+  package: streamlink
+  url: https://github.com/streamlink/streamlink
+  license: BSD-2-Clause
+  purpose: Record a live stream to a file
+
+- name: PySceneDetect
+  kind: pip
+  package: scenedetect
+  url: https://github.com/Breakthrough/PySceneDetect
+  license: BSD-3-Clause
+  purpose: Scene and cut detection
+
+- name: auto-editor
+  kind: pip
+  package: auto-editor
+  url: https://github.com/WyattBlue/auto-editor
+  license: Unlicense
+  purpose: Remove silences and dead air
+
+- name: MediaPipe
+  kind: pip
+  package: mediapipe
+  url: https://github.com/google-ai-edge/mediapipe
+  license: Apache-2.0
+  purpose: Face (facecam) detection
+
+- name: Ultralytics YOLO
+  kind: pip
+  package: ultralytics
+  url: https://github.com/ultralytics/ultralytics
+  license: AGPL-3.0
+  purpose: Subject tracking for the 9:16 crop
+
+- name: faster-whisper
+  kind: pip
+  package: faster-whisper
+  url: https://github.com/SYSTRAN/faster-whisper
+  license: MIT
+  purpose: Local word-level transcription (never needs an API key)
+
+- name: Demucs
+  kind: pip
+  package: demucs
+  url: https://github.com/facebookresearch/demucs
+  license: MIT
+  purpose: Optional voice / music separation
+
+- name: Remotion
+  kind: npm
+  package: remotion
+  url: https://github.com/remotion-dev/remotion
+  license: Remotion License (source-available, free for individuals and small teams)
+  purpose: Optional animated React captions (remotion/ folder)
+
+- name: FFmpeg
+  kind: system
+  command: ffmpeg
+  url: https://ffmpeg.org
+  license: LGPL-2.1+ / GPL-2.0+ (depending on the build)
+  purpose: All encoding, filtering and loudness work (imageio-ffmpeg provides a fallback binary)
+
+- name: Node.js
+  kind: system
+  command: node
+  url: https://nodejs.org
+  license: MIT
+  purpose: Only for the optional Remotion renderer (version 18 or newer)
+
+- name: TwitchDownloaderCLI
+  kind: binary
+  url: https://github.com/lay295/TwitchDownloader/releases/download/{ref}/{asset}
+  ref: 1.56.5
+  license: MIT
+  purpose: Optional Twitch VOD + chat download
+  asset_linux_x64: TwitchDownloaderCLI-1.56.5-Linux-x64.zip
+  sha256_linux_x64: f2bcee00d0e6da759d97c23767345634cb9cdb10cdff96cfa96f97983d51bf55
+  asset_linux_arm64: TwitchDownloaderCLI-1.56.5-LinuxArm64.zip
+  sha256_linux_arm64: 2fde836f07c3ebfcf61cace23742a2c43543fc30fda96071eb96ab8e10c24f7f
+  asset_macos_x64: TwitchDownloaderCLI-1.56.5-MacOS-x64.zip
+  sha256_macos_x64: efaa61d6109dfbce4ddedc28da55e23dc1de30caa2f6a35dc611f9b3bb48b724
+  asset_macos_arm64: TwitchDownloaderCLI-1.56.5-MacOSArm64.zip
+  sha256_macos_arm64: 17a0182f83689a0ae429f48cf03c26f1701eed7edcd787fa3d261898a6023d76
+  asset_windows_x64: TwitchDownloaderCLI-1.56.5-Windows-x64.zip
+  sha256_windows_x64: 8b1b0695f2b1b6bf0d2535fab4b84032951cded8cf4078dfdf4d58e391c813a0
+
+- name: SAM-2
+  kind: git
+  url: https://github.com/facebookresearch/sam2
+  ref: 2b90b9f5ceec907a1c18123530e92e794ad901a4
+  license: Apache-2.0
+  purpose: Reference only - promptable video segmentation (not used at runtime; needs CUDA + large checkpoints)
+  default: false
+
+- name: FunClip
+  kind: git
+  url: https://github.com/modelscope/FunClip
+  ref: v2.2.1
+  license: MIT
+  purpose: Reference only - LLM-guided clipping ideas (CLIP MASTER re-implements the idea)
+  default: false
+
+- name: ClipsAI
+  kind: git
+  url: https://github.com/ClipsAI/clipsai
+  ref: 0.2.1
+  license: MIT
+  purpose: Reference only - long video to clips and 9:16 reframing ideas
+  default: false
+
+- name: WhisperX
+  kind: git
+  url: https://github.com/m-bain/whisperX
+  ref: v3.8.6
+  license: BSD-2-Clause
+  purpose: Reference only - word-level alignment (faster-whisper covers it)
+  default: false
+
+- name: OpenCut
+  kind: git
+  url: https://github.com/OpenCut-app/OpenCut
+  ref: v0.3.0
+  license: MIT
+  purpose: Reference only - open-source video editor UI ideas
+  default: false
+
+- name: silero-vad
+  kind: git
+  url: https://github.com/snakers4/silero-vad
+  ref: v6.2.3
+  license: MIT
+  purpose: Reference only - voice activity detection (faster-whisper ships a VAD)
+  default: false
+
+- name: Practical-RIFE
+  kind: git
+  url: https://github.com/hzwer/Practical-RIFE
+  ref: bbfd2ea90910789a860ea3e2b32a240cd577b75e
+  license: MIT
+  purpose: Reference only - frame interpolation (code only; model weights have their own terms)
+  default: false
+
+- name: auto-subtitle
+  kind: git
+  url: https://github.com/m1guelpf/auto-subtitle
+  ref: 124ccb1ac17d5b7a27dd81b3d8f8fed6ef1a5408
+  license: MIT
+  purpose: Reference only - burning subtitles with FFmpeg
+  default: false
+
+- name: MoviePy
+  kind: git
+  url: https://github.com/Zulko/moviepy
+  ref: v2.2.1
+  license: MIT
+  purpose: Reference only - Python video editing (CLIP MASTER uses FFmpeg filter graphs directly)
+  default: false

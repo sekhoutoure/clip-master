@@ -1,7 +1,6 @@
 import pytest
 
 import pipeline
-from tests.conftest import ORIGIN
 
 
 @pytest.mark.parametrize("bad", ["", "--exec=id", "-o /tmp/x", "file:///etc/passwd", "ftp://x/y", "https://a.b/c d",

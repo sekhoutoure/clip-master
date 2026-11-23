@@ -1,10 +1,8 @@
-import json
 import time
 
 import pytest
 
-from batch_queue import BatchQueue, Cancelled
-from tests.conftest import ORIGIN
+from batch_queue import BatchQueue
 
 
 def make(tmp_path, runner=None, busy=None):
@@ -64,8 +62,6 @@ def test_cancel_queued(tmp_path):
 
 
 def test_cancel_running(tmp_path):
-    holder = {}
-
     def runner(item, progress):
         q.cancel(item["id"])
         progress("02", 10, "next tick")  # raises Cancelled
@@ -81,9 +77,9 @@ def test_worker_runs_in_order_and_waits_when_busy(tmp_path):
     order = []
     state = {"busy": True}
     q = make(tmp_path, lambda item, progress: order.append(item["source"]) or {}, busy=lambda: state["busy"])
-    a = q.add("url", "https://a.b/1")
+    q.add("url", "https://a.b/1")
     time.sleep(0.01)
-    b = q.add("url", "https://a.b/2")
+    q.add("url", "https://a.b/2")
     q.start()
     time.sleep(0.3)
     assert order == []  # busy

@@ -34,3 +34,11 @@ __pycache__/
 *.log
 .DS_Store
 Thumbs.db
+
+# Third-party tools fetched by the installer (never committed)
+third_party/*
+!third_party/manifest.yml
+!third_party/README.md
+*.egg-info/
+build/
+dist/

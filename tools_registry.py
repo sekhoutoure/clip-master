@@ -277,12 +277,13 @@ def get_ffmpeg_path() -> str:
 
 
 def get_twitch_cli() -> str | None:
-    """TWITCHDOWNLOADER_CLI (.env) > bin/TwitchDownloaderCLI > PATH. None when not installed."""
+    """TWITCHDOWNLOADER_CLI (.env) > third_party/ (installer) > bin/ > PATH. None when not installed."""
     if TWITCHDOWNLOADER_CLI and Path(TWITCHDOWNLOADER_CLI).exists():
         return TWITCHDOWNLOADER_CLI
-    local = BIN_DIR / _exe("TwitchDownloaderCLI")
-    if local.exists():
-        return str(local)
+    for folder in (BASE_DIR / "third_party" / "TwitchDownloaderCLI", BIN_DIR):
+        local = folder / _exe("TwitchDownloaderCLI")
+        if local.exists():
+            return str(local)
     return shutil.which("TwitchDownloaderCLI")
 
 
