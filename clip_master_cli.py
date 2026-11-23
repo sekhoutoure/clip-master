@@ -5,7 +5,7 @@ import argparse
 import sys
 import webbrowser
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 
 def _serve(args: argparse.Namespace) -> int:
@@ -14,10 +14,20 @@ def _serve(args: argparse.Namespace) -> int:
     import config
 
     host, port = args.host or config.HOST, args.port or config.PORT
+    import security
+
+    try:
+        security.check_startup(host, config.TOKEN)
+    except RuntimeError as exc:
+        print(f"clip-master: {exc}", file=sys.stderr)
+        return 2
+    # server.py reads HOST/PORT from config when it is imported: keep it in line with --host / --port
+    config.HOST, config.PORT = host, port
     if args.open:
         import threading
 
-        threading.Timer(1.5, lambda: webbrowser.open(f"http://{host}:{port}/")).start()
+        shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+        threading.Timer(1.5, lambda: webbrowser.open(f"http://{shown}:{port}/")).start()
     uvicorn.run("server:app", host=host, port=port, reload=False)
     return 0
 

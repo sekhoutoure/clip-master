@@ -25,6 +25,21 @@ sys.path.insert(0, str(ROOT))
 ORIGIN = {"Origin": "http://127.0.0.1:7866"}
 
 
+@pytest.fixture(autouse=True)
+def _fake_public_dns(monkeypatch):
+    """Tests never touch real DNS: every host name resolves to a documentation-range *public-looking* address.
+
+    (TEST-NET ranges are not "global", so use a real public address that is never contacted.)
+    Tests that exercise the SSRF filter override ``security._getaddrinfo`` themselves.
+    """
+    import security
+
+    def fake(host):
+        return [(2, 1, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(security, "_getaddrinfo", fake)
+
+
 def _ffmpeg() -> str:
     from tools_registry import get_ffmpeg_path
     return get_ffmpeg_path()

@@ -19,6 +19,23 @@
 
   window.getLang = () => lang;
 
+  // Tell the backend which language to use for its error messages, and go back to the login page when
+  // the server answers 401 (token required / expired).
+  const _fetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    init = init || {};
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (url.startsWith('/') || url.startsWith(location.origin)) {
+      const h = new Headers(init.headers || (typeof input !== 'string' && input.headers) || {});
+      if (!h.has('X-Lang')) h.set('X-Lang', lang);
+      init.headers = h;
+    }
+    return _fetch(input, init).then(res => {
+      if (res.status === 401 && url.startsWith('/api/')) location.href = '/';
+      return res;
+    });
+  };
+
   window.applyI18n = function (root) {
     const scope = root || document;
     scope.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });

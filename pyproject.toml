@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clip-master"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local 9:16 Shorts studio: find the best moment, track the subject, caption and export for TikTok, YouTube Shorts and Instagram Reels."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -28,8 +28,9 @@ clip-master = "clip_master_cli:main"
 # Flat layout: the app is run from a source checkout (static/, remotion/, assets/ live next to the code).
 py-modules = [
   "agents_crew", "batch_queue", "bootstrap", "cache_gc", "clip_master_cli", "config", "device", "llm",
-  "pipeline", "presets", "profanity", "qc", "server", "tools_registry", "tracked_render",
+  "messages", "pipeline", "presets", "profanity", "qc", "security", "server", "tools_registry", "tracked_render",
 ]
+packages = ["stages"]
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }

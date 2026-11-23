@@ -14,6 +14,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from messages import LocalizedError
+
 MAX_ITEMS = 200
 
 Runner = Callable[[dict[str, Any], Callable[[str, int, str, list], None]], dict[str, Any]]
@@ -66,7 +68,7 @@ class BatchQueue:
             raise ValueError("kind must be 'url' or 'file'")
         with self._lock:
             if len(self.items) >= MAX_ITEMS:
-                raise ValueError(f"File d'attente pleine ({MAX_ITEMS}). Supprime les éléments terminés.")
+                raise LocalizedError("queue.full", max=MAX_ITEMS)
             now = time.time()
             item = {
                 "id": uuid.uuid4().hex[:10], "kind": kind, "source": source,
@@ -108,9 +110,9 @@ class BatchQueue:
         with self._lock:
             it = self.items[item_id]
             if it["status"] not in ("error", "cancelled"):
-                raise ValueError("Seuls les éléments en erreur ou annulés peuvent être relancés.")
+                raise LocalizedError("queue.retry_state")
             if it["kind"] == "file" and not Path(it["source"]).exists():
-                raise ValueError("Le fichier source n'existe plus : ajoute-le à nouveau.")
+                raise LocalizedError("queue.source_gone")
             it.update(status="queued", stage="", percent=0, message="En attente", error=None, updated_at=time.time())
             self._cancel.discard(item_id)
             self._save()
@@ -121,7 +123,7 @@ class BatchQueue:
         with self._lock:
             it = self.items[item_id]
             if it["status"] == "running":
-                raise ValueError("Annule l'élément avant de le supprimer.")
+                raise LocalizedError("queue.cancel_first")
             self._drop_file(it)
             del self.items[item_id]
             self._save()

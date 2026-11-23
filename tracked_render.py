@@ -12,6 +12,7 @@ Entry point: render_tracked_short(...). Used by pipeline.stage_05_ship when the 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -25,6 +26,8 @@ import numpy as np
 from profanity import censor_text, censor_word
 from qc import OFPS, OH, OW, qc_report
 from tools_registry import get_ffmpeg_path
+
+logger = logging.getLogger("clip_master.tracked_render")
 
 BASE_DIR = Path(__file__).resolve().parent
 FONTS_DIR = BASE_DIR / "assets" / "fonts"
@@ -459,7 +462,7 @@ def _loudnorm_measure(src: Path, s_t: float, e_t: float, speed: float) -> str:
     ffmpeg = get_ffmpeg_path()
     af = "loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json"
     if abs(speed - 1.0) > 0.05:
-        from pipeline import _atempo_chain  # lazy: avoids circular import at module load
+        from stages.ship import _atempo_chain
 
         af = _atempo_chain(speed) + "," + af
     r = _run([ffmpeg, "-hide_banner", "-ss", f"{s_t:.3f}", "-to", f"{e_t:.3f}", "-i", str(src), "-vn", "-af", af, "-f", "null", "-"])
@@ -534,7 +537,7 @@ def render_tracked_short(project: dict[str, Any], src_video: Path, out_path: Pat
         ln = _loudnorm_measure(src_video, s_t, e_t, speed)
         af = []
         if abs(speed - 1.0) > 0.05:
-            from pipeline import _atempo_chain
+            from stages.ship import _atempo_chain
 
             af.append(_atempo_chain(speed))
         af += [ln, "aresample=48000"]
@@ -566,4 +569,4 @@ def render_tracked_short(project: dict[str, Any], src_video: Path, out_path: Pat
             try:
                 f.unlink(missing_ok=True)
             except Exception:
-                pass
+                logger.warning("Could not remove temporary file %s", f, exc_info=True)

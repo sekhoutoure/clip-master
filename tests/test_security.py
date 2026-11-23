@@ -29,10 +29,13 @@ def test_pull_rejects_option_url(client):
 
 
 def test_pull_failure_leaves_no_project(client):
-    before = set(p.name for p in pipeline.PROJECTS_DIR.iterdir())
+    def dirs():  # directories only: a background job may be rewriting _jobs.json(.tmp) at the same moment
+        return {p.name for p in pipeline.PROJECTS_DIR.iterdir() if p.is_dir()}
+
+    before = dirs()
     with pytest.raises(ValueError):
         pipeline.stage_01_pull("ytdlp", url="--bad")
-    assert set(p.name for p in pipeline.PROJECTS_DIR.iterdir()) == before
+    assert dirs() == before
 
 
 def test_csrf_guard(client):
@@ -86,3 +89,84 @@ def test_media_traversal_blocked(client, project):
         assert client.get(f"/media/projects/{pid}/{sub}").status_code in (400, 404)
     assert client.get("/media/projects/_queue_files/x").status_code in (400, 404)
     assert client.get("/media/outputs/..%2fconftest.py").status_code == 404
+
+
+# ---------------------------------------------------------------- more traversal / upload coverage
+@pytest.mark.parametrize("sub", [
+    "../project.json", "..%2fproject.json", "..%5c..%5cproject.json", "%2e%2e%2f%2e%2e%2f_jobs.json",
+    "....//....//_jobs.json", "/etc/passwd", "%2fetc%2fpasswd", "a/../../../_jobs.json", "..%252f..%252f_jobs.json", "source.mp4%00.png",
+])
+def test_media_traversal_variants(client, project, sub):
+    pid = project["id"]
+    r = client.get(f"/media/projects/{pid}/{sub}")
+    assert r.status_code in (400, 404, 422)
+    assert b"_jobs" not in r.content[:50] and b"root:" not in r.content
+
+
+def test_media_traversal_via_project_id(client):
+    for pid in ["..", "%2e%2e", "..%2f", "a/../..", ".hidden_x", "x" * 60]:
+        assert client.get(f"/media/projects/{pid}/project.json").status_code in (400, 404, 422)
+
+
+def test_media_outputs_cannot_leave_folder(client):
+    for name in ["..%2fconftest.py", "..%5cconftest.py", "%2e%2e%2fconftest.py", "../../etc/passwd", "%2fetc%2fpasswd"]:
+        assert client.get(f"/media/outputs/{name}").status_code in (400, 404, 422)
+
+
+def test_media_symlink_escape_blocked(client, project):
+    secret = pipeline.PROJECTS_DIR.parent / "outside_secret.txt"
+    secret.write_text("TOP-SECRET")
+    link = pipeline.PROJECTS_DIR / project["id"] / "leak.txt"
+    try:
+        link.symlink_to(secret)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not available")
+    try:
+        r = client.get(f"/media/projects/{project['id']}/leak.txt")
+        assert r.status_code == 404 and b"TOP-SECRET" not in r.content
+    finally:
+        link.unlink(missing_ok=True)
+        secret.unlink(missing_ok=True)
+
+
+def test_upload_exactly_at_limit_is_accepted_and_one_over_is_not(client, monkeypatch):
+    import server
+    server.JOBS.clear()
+    seen = {}
+    monkeypatch.setattr(server, "_run_bg", lambda jid, fn, *a, **k: seen.setdefault("called", True))
+    monkeypatch.setattr(server, "MAX_UPLOAD_BYTES", 2048)
+    assert client.post("/api/upload", files={"file": ("ok.mp4", b"0" * 2048, "video/mp4")}).status_code == 200
+    server.JOBS.clear()  # the mocked worker never finishes its job
+    assert client.post("/api/upload", files={"file": ("big.mp4", b"0" * 2049, "video/mp4")}).status_code == 413
+    for p in pipeline.PROJECTS_DIR.glob("upload_*"):
+        p.unlink()
+
+
+def test_upload_limit_error_message_is_bilingual(client, monkeypatch):
+    import server
+    monkeypatch.setattr(server, "MAX_UPLOAD_BYTES", 10)
+    en = client.post("/api/upload", files={"file": ("big.mp4", b"0" * 100, "video/mp4")}, headers={"X-Lang": "en"}).json()["detail"]
+    fr = client.post("/api/upload", files={"file": ("big.mp4", b"0" * 100, "video/mp4")}, headers={"X-Lang": "fr"}).json()["detail"]
+    assert "too large" in en and "trop volumineux" in fr
+
+
+def test_queue_upload_oversize_leaves_no_file(client, monkeypatch):
+    import server
+    monkeypatch.setattr(server, "MAX_UPLOAD_BYTES", 1024)
+    before = set(server.QUEUE_FILES.glob("*")) if server.QUEUE_FILES.exists() else set()
+    r = client.post("/api/queue/upload", files={"file": ("big.mp4", b"0" * 5000, "video/mp4")}, data={"options": "{}"})
+    assert r.status_code == 413
+    after = set(server.QUEUE_FILES.glob("*")) if server.QUEUE_FILES.exists() else set()
+    assert after == before
+
+
+def test_upload_filename_cannot_escape(client, monkeypatch):
+    import server
+    monkeypatch.setattr(server, "_run_bg", lambda *a, **k: None)
+    server.JOBS.clear()
+    r = client.post("/api/upload", files={"file": ("..\\..\\evil.mp4", b"abc", "video/mp4")})
+    assert r.status_code in (200, 400)
+    assert not (pipeline.PROJECTS_DIR.parent / "evil.mp4").exists()
+    server.JOBS.clear()
+    for p in pipeline.PROJECTS_DIR.glob("upload_*"):
+        p.unlink()

@@ -11,6 +11,7 @@ Transcription never needs a key: it always runs locally.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 import urllib.error
@@ -18,6 +19,8 @@ import urllib.request
 from typing import Any
 
 import config as cfg
+
+logger = logging.getLogger("clip_master.llm")
 
 LANGUAGES = {"fr": "French", "en": "English", "es": "Spanish", "de": "German", "pt": "Portuguese", "it": "Italian", "ar": "Arabic"}
 
@@ -59,7 +62,7 @@ def probe_ollama(force: bool = False) -> tuple[bool, list[str]]:
         models = [m.get("name", "") for m in data.get("models", [])]
         ok = True
     except Exception:
-        pass
+        logger.debug("Ollama probe failed", exc_info=True)
     _probe_cache.update(t=now, ok=ok, models=models)
     return ok, models
 
@@ -72,6 +75,8 @@ def llm_status(probe: bool = True) -> dict[str, Any]:
         "mode": {"groq": "cloud", "ollama": "local", "none": "off"}[prov],
         "key_present": bool(cfg.GROQ_API_KEY),
         "transcription": "local",
+        # Honest data-flow flag for the UI: with Groq the transcript text is sent to Groq's servers.
+        "sends_text_to_cloud": prov == "groq" and bool(cfg.GROQ_API_KEY),
         "model": "",
         "ready": False,
         "hint": "",

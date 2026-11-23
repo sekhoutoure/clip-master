@@ -7,6 +7,7 @@ A free-space guard (``CLIP_MASTER_MIN_FREE_MB``, default 1024, 0 disables) can r
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import threading
@@ -14,6 +15,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator
+
+logger = logging.getLogger("clip_master.cache_gc")
 
 PROTECTED_FILE_NAMES = frozenset({
     "_queue.json",
@@ -183,7 +186,7 @@ def protected_from_stores(
             try:
                 protected.add(_as_path(it["source"]))
             except Exception:
-                pass
+                logger.warning("Could not resolve queue source %r for protection", it.get("source"), exc_info=True)
 
     jobs = _load_json(projects_dir / "_jobs.json") or {}
     if isinstance(jobs, dict):
@@ -402,7 +405,7 @@ def start_sweeper(interval: int | None = None) -> threading.Event:
             try:
                 auto_purge()
             except Exception:
-                pass
+                logger.warning("Periodic cache sweep failed", exc_info=True)
 
     if _sweeper_thread and _sweeper_thread.is_alive():
         return _sweeper_stop

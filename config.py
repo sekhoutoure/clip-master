@@ -36,6 +36,13 @@ def env_path(name: str, default: Path) -> Path:
 # --- Server -----------------------------------------------------------------
 HOST = env_str("CLIP_MASTER_HOST", "127.0.0.1")
 PORT = env_int("CLIP_MASTER_PORT", 7866)
+# Access token. Required when HOST is not a loopback address (the server refuses to start without it).
+# Optional on loopback: when set, the API and the UI then ask for it as well.
+TOKEN = env_str("CLIP_MASTER_TOKEN")
+# SSRF guard for source URLs: private / loopback / link-local / reserved targets are refused unless this is "1".
+ALLOW_PRIVATE_URLS = env_str("CLIP_MASTER_ALLOW_PRIVATE_URLS") in ("1", "true", "yes")
+# Extra browser origins allowed for mutating requests (comma-separated), e.g. a reverse proxy URL.
+EXTRA_ORIGINS = [o.strip().rstrip("/") for o in env_str("CLIP_MASTER_ALLOWED_ORIGINS").split(",") if o.strip()]
 
 # --- Data folders (default: next to the code; all of them are git-ignored) ---
 DATA_DIR = env_path("CLIP_MASTER_DATA_DIR", BASE_DIR)

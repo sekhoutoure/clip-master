@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import asyncio
 import json
 import os
 import re
 import shutil
+import logging
 import threading
 import time
 import uuid
@@ -14,7 +16,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
@@ -44,13 +46,28 @@ from pipeline import (
     validate_project_id,
 )
 import tracked_render
-from config import BASE_DIR, HOST, MAX_UPLOAD_MB, PORT
+from config import BASE_DIR, EXTRA_ORIGINS, HOST, MAX_UPLOAD_MB, PORT, TOKEN
 import cache_gc
 import device
 import llm
+import messages
 import presets
+import security
 from batch_queue import BatchQueue
 from tools_registry import check_tools_status
+
+logging.basicConfig(
+    level=(os.getenv("CLIP_MASTER_LOG_LEVEL") or "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger("clip_master.server")
+
+# Fail closed: a non-loopback bind needs a token (checked again by `clip-master serve`).
+security.check_startup(HOST, TOKEN)
+NETWORK_MODE = not security.is_loopback_host(HOST)
+AUTH_REQUIRED = bool(TOKEN)  # network mode implies a token (check_startup); optional on loopback
+if NETWORK_MODE:
+    logger.warning("Network mode: listening on %s with token authentication.", HOST)
 
 STATIC_DIR = BASE_DIR / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -60,7 +77,7 @@ async def _lifespan(_app: FastAPI):
     try:
         cache_gc.auto_purge()
     except Exception:
-        pass
+        logger.warning("Startup cache purge failed", exc_info=True)
     cache_gc.start_sweeper()
     QUEUE.start()
     yield
@@ -70,7 +87,7 @@ async def _lifespan(_app: FastAPI):
 
 app = FastAPI(title="CLIP MASTER — 9:16 clip studio", lifespan=_lifespan)
 
-ALLOWED_ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}", f"http://{HOST}:{PORT}"}
+ALLOWED_ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}", f"http://{HOST}:{PORT}", *EXTRA_ORIGINS}
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024  # hard quota, set CLIP_MASTER_MAX_UPLOAD_MB in .env
 MAX_CONCURRENT_JOBS = 1
 
@@ -78,30 +95,86 @@ MAX_CONCURRENT_JOBS = 1
 _hosts = {"localhost", "127.0.0.1", "[::1]", "::1", HOST} | {h.strip() for h in os.getenv("CLIP_MASTER_ALLOWED_HOSTS", "").split(",") if h.strip()}
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"] if HOST in ("0.0.0.0", "::") else sorted(_hosts))
 
+# The UI is same-origin and uses no cross-origin credentials, so CORS stays minimal: only the known origins,
+# explicit methods and headers, no cookies. (Authentication = token header or same-origin cookie, see auth_guard.)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(ALLOWED_ORIGINS),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Clip-Master-Token", "X-Lang"],
 )
+
+
+def _origin_allowed(request: Request, origin: str) -> bool:
+    if origin in ALLOWED_ORIGINS:
+        return True
+    # Network mode: the UI is opened through the server's own address (LAN IP, host name), which is
+    # same-origin as the request's Host header. Token auth (SameSite=Strict cookie) protects it.
+    return NETWORK_MODE and origin in (f"http://{request.headers.get('host', '')}", f"https://{request.headers.get('host', '')}")
 
 
 @app.middleware("http")
 async def csrf_origin_guard(request: Request, call_next):
-    """Reject cross-site and headerless mutating requests (strict anti-CSRF Origin/Referer check)."""
-    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+    """Reject cross-site and headerless mutating requests (strict anti-CSRF Origin/Referer check).
+
+    Scripts that authenticate with the token header are exempt: a browser never attaches that header on its own.
+    """
+    if (
+        request.method in ("POST", "PUT", "PATCH", "DELETE")
+        and not getattr(request.state, "header_authenticated", False)
+        and request.url.path != "/login"  # sign-in form: it only ever grants a session to someone who knows the token
+    ):
         origin = (request.headers.get("origin") or "").rstrip("/")
         referer = request.headers.get("referer") or ""
         if origin:
-            if origin not in ALLOWED_ORIGINS:
-                return JSONResponse({"detail": "Cross-site origin rejected (CSRF protection)"}, status_code=403)
+            if not _origin_allowed(request, origin):
+                return JSONResponse({"detail": messages.t("csrf.cross_site")}, status_code=403)
         elif referer:
-            if not any(referer.startswith(o + "/") or referer == o for o in ALLOWED_ORIGINS):
-                return JSONResponse({"detail": "Cross-site referer rejected (CSRF protection)"}, status_code=403)
+            ref_origin = "/".join(referer.split("/", 3)[:3])  # scheme://host[:port]
+            if not any(referer.startswith(o + "/") or referer == o for o in ALLOWED_ORIGINS) and not _origin_allowed(request, ref_origin):
+                return JSONResponse({"detail": messages.t("csrf.cross_site_referer")}, status_code=403)
         else:
-            return JSONResponse({"detail": "Missing Origin/Referer header (CSRF protection)"}, status_code=403)
+            return JSONResponse({"detail": messages.t("csrf.missing")}, status_code=403)
     return await call_next(request)
+
+
+_OPEN_PATHS = {"/api/health"}  # liveness probe used by start.sh / start.bat: reveals no project data
+
+
+def _session_redirect(request: Request) -> RedirectResponse:
+    resp = RedirectResponse("/", status_code=303)
+    resp.set_cookie(
+        security.COOKIE_NAME, security.cookie_value(TOKEN), httponly=True, samesite="strict",
+        secure=request.url.scheme == "https", max_age=30 * 24 * 3600, path="/",
+    )
+    return resp
+
+
+@app.middleware("http")
+async def auth_guard(request: Request, call_next):
+    """Language per request + token check. Active when CLIP_MASTER_TOKEN is set (mandatory off-loopback).
+
+    Accepted: ``Authorization: Bearer <token>`` or ``X-Clip-Master-Token`` (scripts), or the cookie the UI gets
+    after opening ``/?token=<token>`` once.
+    """
+    messages.set_lang(messages.lang_from_headers(request.headers))
+    if not AUTH_REQUIRED or request.method == "OPTIONS" or request.url.path in _OPEN_PATHS or (
+        request.url.path == "/login" and request.method == "POST"
+    ):
+        return await call_next(request)
+    if security.header_token_ok(request.headers, TOKEN):
+        request.state.header_authenticated = True
+        return await call_next(request)
+    if security.cookie_ok(request.cookies, TOKEN):
+        return await call_next(request)
+    if request.url.path == "/" and request.method == "GET":
+        given = request.query_params.get("token")
+        if security.query_token_ok(given, TOKEN):
+            return _session_redirect(request)
+        return HTMLResponse(security.login_page(error=given is not None), status_code=401 if given is not None else 200)
+    logger.warning("Unauthenticated request refused: %s %s", request.method, request.url.path)
+    return JSONResponse({"detail": messages.t("auth.required")}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
 
 JOBS_FILE = PROJECTS_DIR / "_jobs.json"
 _JOBS_LOCK = threading.RLock()
@@ -114,9 +187,10 @@ def _load_jobs() -> dict[str, dict[str, Any]]:
             for j in data.values():
                 if j.get("status") == "running":
                     j["status"] = "error"
-                    j["error"] = "Serveur redémarré pendant l'exécution"
+                    j["error"] = messages.t("server.restarted", lang=j.get("lang"))
             return data
         except Exception:
+            logger.warning("Could not read %s, starting with no job history", JOBS_FILE, exc_info=True)
             return {}
     return {}
 
@@ -138,7 +212,7 @@ def _persist_jobs(force: bool = True) -> None:
             tmp.write_text(json.dumps(dict(items), ensure_ascii=False), encoding="utf-8")
             os.replace(tmp, JOBS_FILE)
         except Exception:
-            pass
+            logger.warning("Could not persist the jobs file", exc_info=True)
 
 
 JOBS: dict[str, dict[str, Any]] = _load_jobs()
@@ -150,10 +224,7 @@ def _ensure_disk() -> dict:
     if not st["ok"]:
         raise HTTPException(
             status_code=507,
-            detail=(
-                f"Espace disque insuffisant ({st['free_mb']} Mo libres, "
-                f"minimum {st['min_free_mb']} Mo). Vide le cache ou libère de l'espace."
-            ),
+            detail=messages.t("server.disk_low", free_mb=st["free_mb"], min_free_mb=st["min_free_mb"]),
         )
     return st
 
@@ -177,12 +248,13 @@ def _create_job(kind: str) -> str:
         if running >= MAX_CONCURRENT_JOBS:
             raise HTTPException(
                 status_code=429,
-                detail=f"Trop de tâches en cours ({running}/{MAX_CONCURRENT_JOBS}). Attends la fin d'un traitement.",
+                detail=messages.t("server.too_many_jobs", running=running, max=MAX_CONCURRENT_JOBS),
             )
         jid = uuid.uuid4().hex[:10]
         JOBS[jid] = {
             "id": jid,
             "kind": kind,
+            "lang": messages.get_lang(),
             "status": "running",
             "stage": "01 / PULL",
             "percent": 0,
@@ -255,8 +327,10 @@ def _remember_job_project(jid: str, pid: str | None) -> None:
 
 def _run_bg(jid: str, fn, *args, **kwargs) -> None:
     target_pid = kwargs.get("project_id")
+    job_lang = messages.get_lang()
 
     def worker():
+        messages.set_lang(job_lang)
         if target_pid:
             _remember_job_project(jid, target_pid)
             cache_gc.protect(target_pid)
@@ -376,7 +450,7 @@ async def api_queue_upload(file: UploadFile = File(...), options: str = Form(def
     try:
         opts = QueueOptions(**json.loads(options or "{}")).model_dump()
     except Exception:
-        raise HTTPException(status_code=400, detail="Options invalides")
+        raise HTTPException(status_code=400, detail=messages.t("server.bad_options"))
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename or "upload.mp4").name) or "upload.mp4"
     QUEUE_FILES.mkdir(parents=True, exist_ok=True)
     dest = QUEUE_FILES / f"{uuid.uuid4().hex[:8]}_{safe}"
@@ -386,7 +460,7 @@ async def api_queue_upload(file: UploadFile = File(...), options: str = Form(def
             while chunk := await file.read(1024 * 1024):
                 written += len(chunk)
                 if written > MAX_UPLOAD_BYTES:
-                    raise HTTPException(status_code=413, detail=f"Fichier trop volumineux (limite {MAX_UPLOAD_MB} Mo)")
+                    raise HTTPException(status_code=413, detail=messages.t("server.too_large", limit_mb=MAX_UPLOAD_MB))
                 f.write(chunk)
         item = QUEUE.add("file", str(dest), label=safe, options=opts)
     except Exception:
@@ -399,7 +473,7 @@ def _queue_call(fn, item_id: str):
     try:
         return fn(item_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="Élément introuvable")
+        raise HTTPException(status_code=404, detail=messages.t("server.item_not_found"))
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
@@ -509,6 +583,7 @@ class UpdateProjectRequest(BaseModel):
 class AgentCrewRequest(BaseModel):
     project_id: str
     export_mp4: bool = True
+    export_preset: Literal["tiktok", "youtube_shorts", "instagram_reels"] | None = None
 
 
 @app.get("/api/agents/live")
@@ -519,7 +594,7 @@ def api_agents_live(since: int = 0):
 @app.post("/api/agents/run")
 def api_agents_run(req: AgentCrewRequest):
     jid = _create_job("agent_crew")
-    _run_bg(jid, run_autonomous_agent_crew, project_id=req.project_id, export_mp4=req.export_mp4)
+    _run_bg(jid, run_autonomous_agent_crew, project_id=req.project_id, export_mp4=req.export_mp4, export_preset=req.export_preset)
     return {"job_id": jid}
 
 
@@ -566,7 +641,7 @@ def api_repos():
 @app.get("/api/jobs/{job_id}")
 def api_job(job_id: str):
     if job_id not in JOBS:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail=messages.t("server.job_not_found"))
     return JOBS[job_id]
 
 
@@ -587,7 +662,7 @@ def api_list_projects():
                     }
                 )
             except Exception:
-                pass
+                logger.warning("Skipping unreadable project %s", p.name, exc_info=True)
     return {"projects": items}
 
 
@@ -598,7 +673,7 @@ def api_get_project(project_id: str):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail=messages.t("server.project_not_found"))
 
 
 @app.patch("/api/projects/{project_id}")
@@ -611,7 +686,7 @@ def api_update_project(project_id: str, req: UpdateProjectRequest):
         try:
             project = load_project(project_id)
         except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise HTTPException(status_code=404, detail=messages.t("server.project_not_found"))
         if req.captions is not None:
             project["captions"] = req.captions
         if req.crop_x is not None:
@@ -652,7 +727,7 @@ async def api_upload(file: UploadFile = File(...), title: str = Form(default="SO
     safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name) or "upload.mp4"
     tmp_path = (PROJECTS_DIR / f"upload_{uuid.uuid4().hex[:8]}_{safe_name}").resolve()
     if not tmp_path.is_relative_to(PROJECTS_DIR.resolve()):
-        raise HTTPException(status_code=400, detail="Invalid upload filename")
+        raise HTTPException(status_code=400, detail=messages.t("server.invalid_upload_filename"))
     written = 0
     try:
         with tmp_path.open("wb") as f:
@@ -662,7 +737,7 @@ async def api_upload(file: UploadFile = File(...), title: str = Form(default="SO
                     break
                 written += len(chunk)
                 if written > MAX_UPLOAD_BYTES:
-                    raise HTTPException(status_code=413, detail=f"Fichier trop volumineux (limite {MAX_UPLOAD_MB} Mo)")
+                    raise HTTPException(status_code=413, detail=messages.t("server.too_large", limit_mb=MAX_UPLOAD_MB))
                 f.write(chunk)
         jid = _create_job("upload")
     except Exception:
@@ -768,9 +843,10 @@ def api_stage_remotion(req: StageTrackRequest):
 def api_delete_output(filename: str, project_id: str | None = None):
     fpath = (OUTPUTS_DIR / Path(filename).name).resolve()
     if not fpath.is_relative_to(OUTPUTS_DIR.resolve()):
-        raise HTTPException(status_code=400, detail="Invalid filename")
+        raise HTTPException(status_code=400, detail=messages.t("server.invalid_filename"))
     if fpath.exists():
         fpath.unlink(missing_ok=True)
+    project_updated: bool | None = None
     if project_id:
         try:
             validate_project_id(project_id)
@@ -778,9 +854,11 @@ def api_delete_output(filename: str, project_id: str | None = None):
                 proj = load_project(project_id)
                 proj["exports"] = [e for e in proj.get("exports", []) if e.get("filename") != filename]
                 save_project(project_id, proj)
+            project_updated = True
         except Exception:
-            pass
-    return {"ok": True, "deleted": filename}
+            project_updated = False
+            logger.warning("Export %s deleted but project %s could not be updated", filename, project_id, exc_info=True)
+    return {"ok": True, "deleted": filename, "project_updated": project_updated}
 
 
 @app.get("/api/projects/{project_id}/viral-kit")
@@ -790,7 +868,7 @@ def api_viral_kit(project_id: str):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail=messages.t("server.project_not_found"))
     return generate_viral_kit(proj)
 
 
@@ -801,7 +879,7 @@ def api_open_outputs(request: Request):
     import sys
 
     if (request.client.host if request.client else "") not in ("127.0.0.1", "::1", "localhost", "testclient"):
-        raise HTTPException(status_code=403, detail="Only available from the local machine")
+        raise HTTPException(status_code=403, detail=messages.t("server.local_only"))
     path = str(OUTPUTS_DIR)
     try:
         if sys.platform.startswith("win"):
@@ -821,7 +899,7 @@ def api_delete_project(project_id: str):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if not pdir.exists():
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail=messages.t("server.project_not_found"))
     with _project_lock(project_id):
         shutil.rmtree(pdir, ignore_errors=True)
     return {"ok": True, "deleted": project_id}
@@ -864,7 +942,7 @@ def api_download_srt(project_id: str):
         raise HTTPException(status_code=400, detail=str(exc))
     srt_path = (pdir / "captions.srt").resolve()
     if not srt_path.is_relative_to(pdir) or not srt_path.exists():
-        raise HTTPException(status_code=404, detail="SRT not generated yet. Run 04 / CAPTION first.")
+        raise HTTPException(status_code=404, detail=messages.t("server.srt_missing"))
     return FileResponse(srt_path, media_type="text/plain", filename=f"{project_id}_captions.srt")
 
 
@@ -902,19 +980,37 @@ def serve_project_media(project_id: str, subpath: str):
     try:
         pdir = validate_project_id(project_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid project_id")
-    fpath = (pdir / subpath).resolve()
-    if not fpath.is_relative_to(pdir) or not fpath.is_file():
-        raise HTTPException(status_code=404, detail="Media not found")
+        raise HTTPException(status_code=400, detail=messages.t("server.invalid_project_id"))
+    try:
+        fpath = (pdir / subpath).resolve()
+        ok = fpath.is_relative_to(pdir) and fpath.is_file()
+    except (ValueError, OSError):  # e.g. an embedded NUL byte: not a file, not a 500
+        ok = False
+    if not ok:
+        raise HTTPException(status_code=404, detail=messages.t("server.media_not_found"))
     return FileResponse(fpath)
 
 
 @app.get("/media/outputs/{filename}")
 def serve_output_media(filename: str):
-    fpath = (OUTPUTS_DIR / Path(filename).name).resolve()
-    if not fpath.is_relative_to(OUTPUTS_DIR.resolve()) or not fpath.exists():
-        raise HTTPException(status_code=404, detail="Export not found")
+    try:
+        fpath = (OUTPUTS_DIR / Path(filename).name).resolve()
+        ok = fpath.is_relative_to(OUTPUTS_DIR.resolve()) and fpath.exists()
+    except (ValueError, OSError):
+        ok = False
+    if not ok:
+        raise HTTPException(status_code=404, detail=messages.t("server.export_not_found"))
     return FileResponse(fpath, media_type="video/mp4", filename=Path(filename).name)
+
+
+@app.post("/login")
+async def login(request: Request, token: str = Form(default="")):
+    """Login form of the web UI: exchanges the token for the session cookie (keeps it out of the URL)."""
+    if not AUTH_REQUIRED or security.query_token_ok(token, TOKEN):
+        return _session_redirect(request)
+    logger.warning("Failed login attempt from %s", request.client.host if request.client else "?")
+    await asyncio.sleep(0.5)  # slow down guessing
+    return HTMLResponse(security.login_page(error=True), status_code=401)
 
 
 @app.get("/")
