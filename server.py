@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import json
 import os
 import re
@@ -37,17 +38,27 @@ from pipeline import (
     stage_05_batch_ship,
     stage_05_ship,
     stage_remotion_render,
+    stage_translate,
     validate_project_id,
 )
 import tracked_render
 from config import BASE_DIR, HOST, MAX_UPLOAD_MB, PORT
 import llm
+import presets
+from batch_queue import BatchQueue
 from tools_registry import check_tools_status
 
 STATIC_DIR = BASE_DIR / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="CLIP MASTER — 9:16 clip studio")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    QUEUE.start()
+    yield
+    QUEUE.stop()
+
+
+app = FastAPI(title="CLIP MASTER — 9:16 clip studio", lifespan=_lifespan)
 
 ALLOWED_ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}", f"http://{HOST}:{PORT}"}
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024  # hard quota, set CLIP_MASTER_MAX_UPLOAD_MB in .env
@@ -121,7 +132,7 @@ JOBS: dict[str, dict[str, Any]] = _load_jobs()
 
 def _create_job(kind: str) -> str:
     with _JOBS_LOCK:
-        running = sum(1 for j in JOBS.values() if j.get("status") == "running")
+        running = sum(1 for j in JOBS.values() if j.get("status") == "running") + (1 if QUEUE.is_running() else 0)
         if running >= MAX_CONCURRENT_JOBS:
             raise HTTPException(
                 status_code=429,
@@ -226,6 +237,134 @@ def _run_bg(jid: str, fn, *args, **kwargs) -> None:
     t.start()
 
 
+
+# ---------------------------------------------------------------------------
+# Batch queue (several VODs / files, persisted across restarts)
+# ---------------------------------------------------------------------------
+QUEUE_FILES = PROJECTS_DIR / "_queue_files"
+
+
+def _queue_runner(item: dict[str, Any], progress) -> dict[str, Any]:
+    """Full pipeline for one queue item: pull -> find -> track -> caption -> (translate) -> ship."""
+    o = item.get("options") or {}
+    if item["kind"] == "url":
+        proj = stage_01_pull(o.get("source_type", "ytdlp"), url=item["source"], title=item.get("label"),
+                             clip_start=o.get("clip_start"), clip_end=o.get("clip_end"), progress=progress)
+    else:
+        proj = stage_01_pull("local", local_file=Path(item["source"]), title=item.get("label"), progress=progress)
+    pid = proj["id"]
+    with project_run_lock(pid):
+        stage_02_find(pid, strip_silence=bool(o.get("strip_silence")), progress=progress)
+        stage_03_track(pid, progress=progress)
+        stage_04_caption(pid, model_size=o.get("model_size", "tiny"), language=o.get("language", "auto"), progress=progress)
+        if o.get("translate_to"):
+            stage_translate(pid, o["translate_to"], progress=progress)
+        p = load_project(pid)
+        hl = p.get("highlight", {})
+        res = stage_05_ship(
+            pid, layout_mode=o.get("layout_mode", "FACECAM + GAME + CAPS"), crop_x=p.get("crop_x", 0.5),
+            font_size=p.get("font_size", 40), start_sec=hl.get("start"), end_sec=hl.get("end"),
+            tracked=o.get("tracked"), export_preset=o.get("export_preset"), progress=progress,
+        )
+    return {"project_id": pid, "output": res["export"]["filename"]}
+
+
+QUEUE = BatchQueue(
+    PROJECTS_DIR / "_queue.json", QUEUE_FILES, _queue_runner,
+    busy=lambda: any(j.get("status") == "running" for j in list(JOBS.values())),
+)
+
+
+class QueueOptions(BaseModel):
+    export_preset: Literal["tiktok", "youtube_shorts", "instagram_reels"] | None = None
+    translate_to: Literal["fr", "en", "es", "de", "pt", "it", "ar"] | None = None
+    source_type: Literal["ytdlp", "twitchdownloader"] = "ytdlp"
+    model_size: Literal["tiny", "base", "small", "medium"] = "tiny"
+    language: str = Field(default="auto", min_length=2, max_length=8)
+    layout_mode: str = Field(default="FACECAM + GAME + CAPS", max_length=40)
+    strip_silence: bool = False
+    tracked: dict[str, Any] | None = None
+
+
+class QueueAddRequest(BaseModel):
+    urls: list[str] = Field(min_length=1, max_length=50)
+    options: QueueOptions = QueueOptions()
+
+
+@app.get("/api/queue")
+def api_queue():
+    return {"items": QUEUE.list(), "running": QUEUE.is_running()}
+
+
+@app.post("/api/queue")
+def api_queue_add(req: QueueAddRequest):
+    from pipeline import validate_source_url
+
+    try:
+        urls = [validate_source_url(u) for u in req.urls]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        added = [QUEUE.add("url", u, label=u.rsplit("/", 1)[-1].split("?")[0] or u, options=req.options.model_dump()) for u in urls]
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return {"added": added}
+
+
+@app.post("/api/queue/upload")
+async def api_queue_upload(file: UploadFile = File(...), options: str = Form(default="{}")):
+    try:
+        opts = QueueOptions(**json.loads(options or "{}")).model_dump()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Options invalides")
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename or "upload.mp4").name) or "upload.mp4"
+    QUEUE_FILES.mkdir(parents=True, exist_ok=True)
+    dest = QUEUE_FILES / f"{uuid.uuid4().hex[:8]}_{safe}"
+    written = 0
+    try:
+        with dest.open("wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail=f"Fichier trop volumineux (limite {MAX_UPLOAD_MB} Mo)")
+                f.write(chunk)
+        item = QUEUE.add("file", str(dest), label=safe, options=opts)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    return {"added": [item]}
+
+
+def _queue_call(fn, item_id: str):
+    try:
+        return fn(item_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Élément introuvable")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@app.post("/api/queue/{item_id}/cancel")
+def api_queue_cancel(item_id: str):
+    return _queue_call(QUEUE.cancel, item_id)
+
+
+@app.post("/api/queue/{item_id}/retry")
+def api_queue_retry(item_id: str):
+    return _queue_call(QUEUE.retry, item_id)
+
+
+@app.delete("/api/queue/{item_id}")
+def api_queue_remove(item_id: str):
+    _queue_call(QUEUE.remove, item_id)
+    return {"ok": True}
+
+
+@app.post("/api/queue-clear")
+def api_queue_clear():
+    return {"removed": QUEUE.clear_finished()}
+
+
 class PullRequest(BaseModel):
     url: str = Field(max_length=2048)
     source_type: Literal["ytdlp", "streamlink", "twitchdownloader"] = "ytdlp"
@@ -265,6 +404,7 @@ class StageShipRequest(BaseModel):
     start_sec: float | None = Field(default=None, ge=0.0, le=86400.0)
     end_sec: float | None = Field(default=None, ge=0.0, le=86400.0)
     tracked: dict[str, Any] | None = None   # tracked-mode options (see tracked_render.DEFAULT_OPTIONS)
+    export_preset: Literal["tiktok", "youtube_shorts", "instagram_reels"] | None = None
 
     @model_validator(mode="after")
     def _check_trim_range(self):
@@ -282,6 +422,7 @@ class BatchShipRequest(BaseModel):
     playback_speed: float = Field(default=1.0, ge=0.25, le=2.0)
     upscale_sharpen: bool = False
     tracked: dict[str, Any] | None = None
+    export_preset: Literal["tiktok", "youtube_shorts", "instagram_reels"] | None = None
 
 
 class FullPipelineRequest(BaseModel):
@@ -291,6 +432,8 @@ class FullPipelineRequest(BaseModel):
     language: str = Field(default="auto", min_length=2, max_length=8)
     layout_mode: str = Field(default="FACECAM + GAME + CAPS", max_length=40)
     tracked: dict[str, Any] | None = None
+    export_preset: Literal["tiktok", "youtube_shorts", "instagram_reels"] | None = None
+    translate_to: Literal["fr", "en", "es", "de", "pt", "it", "ar"] | None = None
 
 
 class UpdateProjectRequest(BaseModel):
@@ -318,6 +461,11 @@ def api_agents_run(req: AgentCrewRequest):
     jid = _create_job("agent_crew")
     _run_bg(jid, run_autonomous_agent_crew, project_id=req.project_id, export_mp4=req.export_mp4)
     return {"job_id": jid}
+
+
+@app.get("/api/presets")
+def api_presets():
+    return {"presets": presets.list_presets(), "caption_styles": list(presets.ALL_CAPTION_STYLES)}
 
 
 @app.get("/api/mode")
@@ -469,6 +617,18 @@ def api_stage_caption(req: StageCaptionRequest):
     return {"job_id": jid}
 
 
+class TranslateRequest(BaseModel):
+    project_id: str
+    target_lang: Literal["fr", "en", "es", "de", "pt", "it", "ar"]
+
+
+@app.post("/api/stage/translate")
+def api_stage_translate(req: TranslateRequest):
+    jid = _create_job("translate")
+    _run_bg(jid, stage_translate, project_id=req.project_id, target_lang=req.target_lang)
+    return {"job_id": jid}
+
+
 @app.post("/api/stage/ship")
 def api_stage_ship(req: StageShipRequest):
     jid = _create_job("ship")
@@ -489,6 +649,7 @@ def api_stage_ship(req: StageShipRequest):
         start_sec=req.start_sec,
         end_sec=req.end_sec,
         tracked=req.tracked,
+        export_preset=req.export_preset,
     )
     return {"job_id": jid}
 
@@ -507,6 +668,7 @@ def api_stage_batch_ship(req: BatchShipRequest):
         playback_speed=req.playback_speed,
         upscale_sharpen=req.upscale_sharpen,
         tracked=req.tracked,
+        export_preset=req.export_preset,
     )
     return {"job_id": jid}
 
@@ -629,6 +791,8 @@ def api_stage_full(req: FullPipelineRequest):
         stage_02_find(pid, strip_silence=req.strip_silence, progress=progress)
         stage_03_track(pid, progress=progress)
         stage_04_caption(pid, model_size=req.model_size, language=req.language, progress=progress)
+        if req.translate_to:
+            stage_translate(pid, req.translate_to, progress=progress)
         proj = load_project(pid)
         hl = proj.get("highlight", {})
         return stage_05_ship(
@@ -639,6 +803,7 @@ def api_stage_full(req: FullPipelineRequest):
             start_sec=hl.get("start"),
             end_sec=hl.get("end"),
             tracked=req.tracked,
+            export_preset=req.export_preset,
             progress=progress,
         )
 

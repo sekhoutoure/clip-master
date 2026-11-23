@@ -16,6 +16,7 @@ from typing import Any, Callable
 import cv2
 import numpy as np
 
+import presets as _presets
 import tracked_render
 from config import BASE_DIR, BIN_DIR, DOWNLOAD_TIMEOUT, MODELS_DIR, OUTPUTS_DIR, PROJECTS_DIR
 from tools_registry import ensure_face_model, get_ffmpeg_path, get_twitch_cli, get_yolo_weights_path
@@ -924,11 +925,12 @@ def _write_ass_subtitles(
     font_size: int = 40,
     split_mode: bool = True,
     caption_style: str = "pink",
+    min_margin_v: int = 0,
 ) -> None:
     preset = CAPTION_PRESETS.get(caption_style, CAPTION_PRESETS["pink"])
     scaled_size = max(56, int(font_size * 1.9))
     is_tiktok = caption_style.startswith("tiktok")
-    margin_v = 380 if is_tiktok else (1140 if split_mode else 420)
+    margin_v = max(min_margin_v, 380 if is_tiktok else (1140 if split_mode else 420))
     italic_val = preset.get("italic", 0)
     border_style = preset.get("border_style", 3)
     outline_w = preset.get("outline_w", 10)
@@ -970,6 +972,37 @@ def generate_viral_kit(project: dict[str, Any]) -> dict[str, Any]:
         "description": f"{snippet}\n\n{hashtags}",
         "hashtags": hashtags,
     }
+
+
+def stage_translate(
+    project_id: str,
+    target_lang: str,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    """Translate the project's captions with the active LLM (Groq, or local Ollama in no-key mode).
+
+    Timings are kept. The original text stays in ``text_src`` so a second translation starts from the source.
+    """
+    import llm
+
+    project = load_project(project_id)
+    caps = project.get("captions") or []
+    if not caps:
+        raise ValueError("Aucun sous-titre à traduire : lance d'abord l'étape CAPTION.")
+    if progress:
+        progress("04 / CAPTION", 60, f"Traduction des sous-titres → {target_lang} ({llm.provider()})...", ["11"])
+    source = [{**c, "text": c.get("text_src", c.get("text", ""))} for c in caps]
+    translated = llm.translate_captions(source, target_lang)
+    with _project_lock(project_id):
+        project = load_project(project_id)
+        project["captions"] = translated
+        project["caption_lang"] = target_lang
+        save_project(project_id, project)
+        srt = [f"{i}\n{_fmt_srt(c['start'])} --> {_fmt_srt(c['end'])}\n{c['text']}\n" for i, c in enumerate(translated, 1)]
+        (PROJECTS_DIR / project_id / "captions.srt").write_text("\n".join(srt), encoding="utf-8")
+    if progress:
+        progress("04 / CAPTION", 100, f"{len(translated)} sous-titres traduits ({target_lang})", ["11"])
+    return project
 
 
 # ---------------------------------------------------------------------------
@@ -1107,8 +1140,10 @@ def stage_05_ship(
     end_sec: float | None = None,
     short_label: str = "SHORT_01",
     tracked: dict[str, Any] | None = None,
+    export_preset: str | None = None,
     progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
+    _presets.get_preset(export_preset)  # fail early on a typo
     project = load_project(project_id)
     pdir = PROJECTS_DIR / project_id
     video_path = pdir / project["video_file"]
@@ -1130,6 +1165,15 @@ def stage_05_ship(
     e_t = min(dur, float(end_sec) if end_sec is not None else dur)
     if e_t - s_t < 0.3:
         s_t, e_t = 0.0, dur
+
+    # Export preset (TikTok / Shorts / Reels): cap the length, keep captions in the platform safe zone
+    s_t, e_t, preset_trimmed = _presets.clamp_window(export_preset, s_t, e_t, speed)
+    caption_style = _presets.resolve_caption_style(export_preset, caption_style)
+    preset_margin_v = _presets.caption_margin_v(export_preset)
+    if export_preset:
+        t_opts["caption_ypos"] = min(float(t_opts["caption_ypos"]), _presets.caption_ypos(export_preset))
+        if progress and preset_trimmed:
+            progress("05 / SHIP", 12, f"Preset {export_preset}: durée limitée à {_presets.PRESETS[export_preset]['max_duration']} s", ["20"])
 
     if t_opts["enabled"]:
         use_demucs = False      # tracked mode keeps the original audio
@@ -1180,7 +1224,8 @@ def stage_05_ship(
 
     split_mode = "FACECAM" in layout_mode.upper()
     ass_path = pdir / "render_caps.ass"
-    _write_ass_subtitles(shifted_caps, ass_path, font_size=font_size, split_mode=split_mode, caption_style=caption_style)
+    _write_ass_subtitles(shifted_caps, ass_path, font_size=font_size, split_mode=split_mode, caption_style=caption_style,
+                         min_margin_v=preset_margin_v)
 
     out_name = f"{'TRACKED_' if t_opts['enabled'] else ''}{short_label}_{project_id}_{int(time.time())}.mp4"
     out_path = OUTPUTS_DIR / out_name
@@ -1222,6 +1267,7 @@ def stage_05_ship(
             "duration": out_info["duration"],
             "speed": speed,
             "captions_burned": report["captions_burned"],
+            "preset": export_preset,
             "created_at": int(time.time()),
             "tracked": {
                 "report": report, "clip_start": s_t, "clip_end": e_t,
@@ -1278,6 +1324,7 @@ def stage_05_ship(
         "duration": out_info["duration"],
         "speed": speed,
         "captions_burned": captions_burned,
+        "preset": export_preset,
         "created_at": int(time.time()),
     }
     project = load_project(project_id)  # reload: UI may have saved edits meanwhile
@@ -1308,6 +1355,7 @@ def stage_05_batch_ship(
     retention_bar: bool = True,
     normalize_audio: bool = True,
     tracked: dict[str, Any] | None = None,
+    export_preset: str | None = None,
     progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     project = load_project(project_id)
@@ -1329,7 +1377,7 @@ def stage_05_batch_ship(
             project_id=project_id, layout_mode=layout_mode, crop_x=crop_x, font_size=font_size,
             caption_style=caption_style, playback_speed=playback_speed, upscale_sharpen=upscale_sharpen,
             retention_bar=retention_bar, normalize_audio=normalize_audio,
-            start_sec=s_t, end_sec=e_t, short_label=label, tracked=tracked, progress=None,
+            start_sec=s_t, end_sec=e_t, short_label=label, tracked=tracked, export_preset=export_preset, progress=None,
         )
         exports.append(res["export"])
 
