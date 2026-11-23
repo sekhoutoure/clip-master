@@ -5,10 +5,10 @@
 **Turn any long video into a captioned 9:16 Short, on your own machine.**
 Find the best moment, track the subject, burn the captions, export for TikTok, YouTube Shorts or Instagram Reels.
 
-[![CI](https://github.com/OWNER/clip-master/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/clip-master/actions/workflows/ci.yml)
+[![CI](https://github.com/sekhoutoure/clip-master/actions/workflows/ci.yml/badge.svg)](https://github.com/sekhoutoure/clip-master/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Python 3.10-3.12](https://img.shields.io/badge/python-3.10--3.12-blue.svg)](#requirements)
-[![Release](https://img.shields.io/github/v/release/OWNER/clip-master?include_prereleases)](https://github.com/OWNER/clip-master/releases)
+[![Release](https://img.shields.io/github/v/release/sekhoutoure/clip-master?include_prereleases)](https://github.com/sekhoutoure/clip-master/releases)
 [![No API key needed](https://img.shields.io/badge/API%20key-not%20required-brightgreen.svg)](#ai-mode-with-or-without-a-key)
 
 English | [Français](README.fr.md)
@@ -22,7 +22,7 @@ English | [Français](README.fr.md)
 ## Quick start
 
 ```bash
-git clone https://github.com/OWNER/clip-master && cd clip-master
+git clone https://github.com/sekhoutoure/clip-master && cd clip-master
 ./install.sh            # Windows: .\install.ps1
 ./start.sh              # Windows: start.bat   ->  http://127.0.0.1:7866
 ```
@@ -111,7 +111,7 @@ Copy `.env.example` to `.env` (the installer does it). Everything is optional.
 Give your coding agent (Claude Code, Cursor, Codex, Copilot, Aider…) this prompt:
 
 ```text
-Install CLIP MASTER on this machine: clone https://github.com/OWNER/clip-master, read AGENTS.md,
+Install CLIP MASTER on this machine: clone https://github.com/sekhoutoure/clip-master, read AGENTS.md,
 then run the installer (./install.sh --yes, or .\install.ps1 -Yes on Windows) and the doctor
 (./install.sh --check). Fix anything the doctor reports, run the tests (pytest -m "not slow"),
 start the app and tell me the URL. Do not ask me for API keys: the app works without one.

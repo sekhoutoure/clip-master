@@ -23,5 +23,5 @@ First public version of CLIP MASTER.
 - Only plain http(s) URLs reach yt-dlp / streamlink / TwitchDownloader; `--` is passed before URLs; time ranges are validated; no shell execution.
 - Configurable upload size limit, strict CSRF origin guard, local-only "open outputs folder".
 
-[Unreleased]: https://github.com/OWNER/clip-master/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/OWNER/clip-master/releases/tag/v0.1.0
+[Unreleased]: https://github.com/sekhoutoure/clip-master/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/sekhoutoure/clip-master/releases/tag/v0.1.0

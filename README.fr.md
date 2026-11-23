@@ -5,10 +5,10 @@
 **Transforme n'importe quelle longue vidéo en Short 9:16 sous-titré, sur ta machine.**
 Trouve le meilleur moment, suit le sujet, incruste les sous-titres, exporte pour TikTok, YouTube Shorts ou Instagram Reels.
 
-[![CI](https://github.com/OWNER/clip-master/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/clip-master/actions/workflows/ci.yml)
+[![CI](https://github.com/sekhoutoure/clip-master/actions/workflows/ci.yml/badge.svg)](https://github.com/sekhoutoure/clip-master/actions/workflows/ci.yml)
 [![Licence : AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue.svg)](LICENSE)
 [![Python 3.10-3.12](https://img.shields.io/badge/python-3.10--3.12-blue.svg)](#prérequis)
-[![Release](https://img.shields.io/github/v/release/OWNER/clip-master?include_prereleases)](https://github.com/OWNER/clip-master/releases)
+[![Release](https://img.shields.io/github/v/release/sekhoutoure/clip-master?include_prereleases)](https://github.com/sekhoutoure/clip-master/releases)
 [![Sans clé API](https://img.shields.io/badge/cl%C3%A9%20API-non%20requise-brightgreen.svg)](#mode-ia-avec-ou-sans-clé)
 
 [English](README.md) | Français
@@ -22,7 +22,7 @@ Trouve le meilleur moment, suit le sujet, incruste les sous-titres, exporte pour
 ## Démarrage rapide
 
 ```bash
-git clone https://github.com/OWNER/clip-master && cd clip-master
+git clone https://github.com/sekhoutoure/clip-master && cd clip-master
 ./install.sh            # Windows : .\install.ps1
 ./start.sh              # Windows : start.bat   ->  http://127.0.0.1:7866
 ```
@@ -100,7 +100,7 @@ Copie `.env.example` en `.env` (l'installeur le fait). Tout est optionnel : voir
 Donne ce texte à ton agent de code (Claude Code, Cursor, Codex, Copilot, Aider…) :
 
 ```text
-Installe CLIP MASTER sur cette machine : clone https://github.com/OWNER/clip-master, lis AGENTS.md,
+Installe CLIP MASTER sur cette machine : clone https://github.com/sekhoutoure/clip-master, lis AGENTS.md,
 lance l'installeur (./install.sh --yes, ou .\install.ps1 -Yes sous Windows) puis le diagnostic
 (./install.sh --check). Corrige tout ce que le diagnostic signale, lance les tests (pytest -m "not slow"),
 démarre l'application et donne-moi l'URL. Ne me demande pas de clé API : l'appli marche sans.
