@@ -44,8 +44,11 @@ Install dev tools with `.venv/bin/python -m pip install -r requirements-dev.txt`
 
 | File | Role |
 |---|---|
-| `server.py` | FastAPI routes, job runner, CSRF origin guard, batch queue endpoints |
-| `pipeline.py` | Stages: `stage_01_pull`, `02_find`, `03_track`, `04_caption`, `stage_translate`, `05_ship` (+ batch, animated captions) |
+| `server.py` | FastAPI routes, job runner, token auth + CSRF origin guard middlewares, batch queue endpoints |
+| `security.py` | Token / cookie checks, startup guard for non-loopback hosts, SSRF address filter |
+| `messages.py` | Backend messages in fr/en (`t()`, `LocalizedError`); language from `X-Lang` / `Accept-Language` |
+| `pipeline.py` | Stages: `stage_01_pull`, `02_find`, `03_track`, `04_caption`, `stage_translate` (+ batch, animated captions); re-exports `05_ship` |
+| `stages/ship.py` | `stage_05_ship` and the 9:16 encode helpers (first module split out of `pipeline.py`; more to follow) |
 | `tracked_render.py` | "Tracked" mode: followed crop, facecam inset, captions, QC |
 | `presets.py` | TikTok / YouTube Shorts / Instagram Reels export presets (max length, safe zones, caption styles) |
 | `batch_queue.py` | Persistent queue (`projects/_queue.json`): cancel, retry, resume after restart |
@@ -63,7 +66,9 @@ Install dev tools with `.venv/bin/python -m pip install -r requirements-dev.txt`
 - Keep it generic: no campaign, channel or brand-specific code, presets or assets.
 - Every user-visible string in the UI goes through `data-i18n` / `t()` and exists in **both** `static/i18n/fr.json` and `en.json` (a test enforces it).
 - Validate anything that reaches a subprocess: URLs through `pipeline.validate_source_url`, times through `validate_time_spec`; pass `--` before URLs; never use `shell=True`.
-- Mutating API calls need an `Origin` header equal to the server origin (CSRF guard). Tests use the `client` fixture which sets it.
+- Mutating API calls need an `Origin` header equal to the server origin (CSRF guard), or the token header when `CLIP_MASTER_TOKEN` is set. Tests use the `client` fixture which sets it.
+- Listening on a non-loopback host requires `CLIP_MASTER_TOKEN` (server refuses to start otherwise). Source URLs go through `validate_source_url`, which includes the SSRF filter; tests fake DNS (see `tests/conftest.py`).
+- User-visible backend errors are raised with `messages.LocalizedError` / `messages.t(...)` (fr + en entries in `messages.CATALOG`). Log with module loggers (`logging.getLogger("clip_master.<module>")`); no bare `except Exception: pass`.
 - New third-party tool: add it to `third_party/manifest.yml` (license, pinned ref) and `NOTICE.md`. Do not vendor code. Skip projects with no license.
 - Add or update tests for behavior you change. Update `CHANGELOG.md` (Unreleased section).
 - Python style: ruff, type hints on new functions, `pathlib.Path`, no new global state without a lock.

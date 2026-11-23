@@ -16,7 +16,7 @@ Only process content the user has the rights to (their own, licensed, or permitt
 
 ## HTTP API (for agents)
 
-All mutating requests need `Origin: http://127.0.0.1:7866` (CSRF guard). Everything is asynchronous: you get a `job_id`, then poll `GET /api/jobs/{job_id}` until `status` is `done` or `error`.
+All mutating requests need `Origin: http://127.0.0.1:7866` (CSRF guard), unless you authenticate with the token header. If `CLIP_MASTER_TOKEN` is set (mandatory when listening beyond localhost) also send `Authorization: Bearer $CLIP_MASTER_TOKEN` (or `X-Clip-Master-Token`); with the token header, `Origin` is not needed. Source URLs that point at private/local addresses are refused (`CLIP_MASTER_ALLOW_PRIVATE_URLS=1` to allow). Send `X-Lang: fr|en` to choose the language of error messages. Everything is asynchronous: you get a `job_id`, then poll `GET /api/jobs/{job_id}` until `status` is `done` or `error`.
 
 ```bash
 O='Origin: http://127.0.0.1:7866'; H='Content-Type: application/json'

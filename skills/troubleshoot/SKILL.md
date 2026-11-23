@@ -18,7 +18,10 @@ Start with the doctor: `./install.sh --check` (Windows `.\install.ps1 -Check`, o
 | `Impossible d'enregistrer le live` | channel is offline | the channel must be live |
 | Badge says `Local · Ollama unavailable` | no `GROQ_API_KEY` and Ollama not running / model missing | start Ollama and `ollama pull qwen2.5:7b`, or put a Groq key in `.env`, or `LLM_PROVIDER=none` for heuristics only |
 | Translation fails | LLM not ready (see above) | fix the AI mode; translation uses the same LLM |
-| HTTP 403 `CSRF protection` on API calls | missing `Origin` header | send `Origin: http://127.0.0.1:7866` (match `CLIP_MASTER_HOST/PORT`) |
+| HTTP 403 `CSRF protection` on API calls | missing `Origin` header | send `Origin: http://127.0.0.1:7866` (match `CLIP_MASTER_HOST/PORT`), or authenticate with `Authorization: Bearer $CLIP_MASTER_TOKEN` |
+| HTTP 401 `Authentication required` | `CLIP_MASTER_TOKEN` is set | send it as `Authorization: Bearer <token>` / `X-Clip-Master-Token`, or open `/?token=<token>` in the browser |
+| Server exits with `Refusing to listen ... without CLIP_MASTER_TOKEN` | non-loopback `CLIP_MASTER_HOST` | set a token (16+ chars) or use `127.0.0.1` |
+| `URL refused (private or local address)` | SSRF guard | use a public URL, or `CLIP_MASTER_ALLOW_PRIVATE_URLS=1` if you really mean it |
 | HTTP 429 `Trop de tâches en cours` | one job (or the queue) is already running | wait, or check `GET /api/jobs/<id>` |
 | `Fichier trop volumineux` | upload above the limit | raise `CLIP_MASTER_MAX_UPLOAD_MB` in `.env` |
 | Download times out | long VOD | give `clip_start` / `clip_end`, or raise `CLIP_MASTER_DOWNLOAD_TIMEOUT` |

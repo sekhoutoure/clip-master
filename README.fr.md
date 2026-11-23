@@ -40,7 +40,7 @@ L'installeur prépare un environnement virtuel, les paquets Python, FFmpeg et No
 - **Préréglages d'export** pour **TikTok, YouTube Shorts et Instagram Reels** : durée max, zones sûres, styles de sous-titres. 1080×1920, 30 i/s, -14 LUFS, contrôle qualité intégré.
 - **File d'attente** : colle plusieurs liens ou dépose plusieurs fichiers ; ils sont traités un par un, annulables, relançables, et reprennent après un redémarrage.
 - **Interface FR / EN** avec bascule, et **traduction automatique des sous-titres** (fr, en, es, de, pt, it, ar).
-- **Local d'abord** : rien n'est envoyé. Transcription et rendu tournent sur ta machine.
+- **Local d'abord** : sans `GROQ_API_KEY`, tout tourne 100 % sur ta machine (transcription, LLM via Ollama, rendu). Avec une clé Groq, le **texte de la transcription** (pas la vidéo ni l'audio) est envoyé à Groq pour choisir les moments, polir les sous-titres et traduire ; l'interface affiche alors un badge **« Texte envoyé à Groq »**. Télécharger depuis un lien contacte évidemment ce site.
 - **GPU si disponible** : CUDA est détecté au démarrage (`CLIP_MASTER_DEVICE=auto`). La transcription (float16) et le suivi du sujet passent alors sur le GPU ; sinon ils restent sur CPU (int8). DirectML n'est pas activé automatiquement.
 - **Nettoyage disque** : les dossiers de travail, fichiers intermédiaires et exports de plus de 48 h sont purgés au démarrage et périodiquement (`CLIP_MASTER_CACHE_TTL_HOURS=0` désactive le passage automatique). Un garde-fou peut refuser de nouveaux traitements s'il reste trop peu d'espace. Bouton **Vider le cache & anciens exports** ou `clip-master clean`.
 
@@ -71,6 +71,7 @@ flowchart LR
 | Installer | `./install.sh` | `.\install.ps1` |
 | Installer aussi FFmpeg / Node | `./install.sh --yes` | `.\install.ps1 -Yes` |
 | Sans GPU (petit PyTorch) | `./install.sh --cpu-torch` | `.\install.ps1 -CpuTorch` |
+| Versions exactes, reproductibles | `./install.sh --locked` (Python 3.12, Linux x86_64 / macOS arm64) | `pip install -r requirements-lock\windows-x86_64-py312.txt` dans le venv |
 | Vérifier | `./install.sh --check` | `.\install.ps1 -Check` |
 | Lancer | `./start.sh` | `start.bat` |
 
@@ -86,6 +87,22 @@ Les outils tiers (versions figées, licences, rôle) sont listés dans [`third_p
 
 Tout est aussi disponible en HTTP pour les scripts (`/api/pull`, `/api/stage/full`, `/api/queue`, …) : voir [`skills/make-a-short-from-vod/SKILL.md`](skills/make-a-short-from-vod/SKILL.md).
 
+**Prérequis pour les scripts.** Toute requête qui modifie quelque chose (`POST`, `PATCH`, `DELETE`) doit porter un en-tête `Origin` égal à l'origine du serveur (garde anti-CSRF ; les navigateurs l'ajoutent seuls, pas `curl`). Si `CLIP_MASTER_TOKEN` est défini, envoie-le en `Authorization: Bearer <jeton>` ou `X-Clip-Master-Token: <jeton>` : une requête authentifiée ainsi n'a pas besoin d'`Origin`.
+
+```bash
+curl -s -X POST http://127.0.0.1:7866/api/pull -H 'Origin: http://127.0.0.1:7866' -H 'Content-Type: application/json' \
+     -d '{"url":"https://www.twitch.tv/videos/123456789"}'                         # sans jeton configuré
+curl -s -X POST http://192.168.1.20:7866/api/pull -H "Authorization: Bearer $CLIP_MASTER_TOKEN" \
+     -H 'Content-Type: application/json' -d '{"url":"https://www.twitch.tv/videos/123456789"}'   # jeton configuré
+```
+
+### Sécurité
+
+- **Écoute sur `127.0.0.1` par défaut.** Pour y accéder depuis un autre appareil, mets `CLIP_MASTER_HOST=0.0.0.0` **et** `CLIP_MASTER_TOKEN` (génère-en un : `python -c "import secrets; print(secrets.token_urlsafe(24))"`). Sans jeton, le serveur refuse de démarrer. Ouvre `http://<ip>:7866/` et saisis le jeton sur la page de connexion (ou ouvre une fois `http://<ip>:7866/?token=<jeton>`, qui apparaît alors dans le journal du serveur) : le navigateur reçoit un cookie HttpOnly `SameSite=Strict` et le jeton disparaît de la barre d'adresse. Pas de TLS : réseau de confiance ou reverse proxy HTTPS.
+- **Garde SSRF.** Les URL sources sont résolues et refusées si elles visent une adresse privée, loopback, link-local, réservée ou multicast (IPv4 et IPv6), par exemple `http://169.254.169.254/` ou `http://192.168.x.x/`. Désactivable avec `CLIP_MASTER_ALLOW_PRIVATE_URLS=1`. Limite : la vérification a lieu avant le téléchargement, une URL publique qui redirige ensuite vers une adresse privée n'est pas détectée.
+- Aussi : contrôle strict `Origin`/`Referer` sur les requêtes qui modifient, liste blanche des `Host` (DNS rebinding), aucune exécution shell, identifiants de projet et chemins média validés, limite de taille d'envoi.
+
+
 ### Préréglages d'export
 
 | Préréglage | Durée max | Bas de l'écran laissé libre | Style de sous-titres par défaut |
@@ -98,7 +115,7 @@ Les valeurs sont dans [`presets.py`](presets.py) ; les plateformes changent leur
 
 ## Configuration
 
-Copie `.env.example` en `.env` (l'installeur le fait). Tout est optionnel : voir le tableau de la [version anglaise](README.md#configuration), y compris `CLIP_MASTER_CACHE_TTL_HOURS`, `CLIP_MASTER_MIN_FREE_MB` et `CLIP_MASTER_DEVICE`.
+Copie `.env.example` en `.env` (l'installeur le fait). Tout est optionnel : voir le tableau de la [version anglaise](README.md#configuration), y compris `CLIP_MASTER_TOKEN`, `CLIP_MASTER_ALLOW_PRIVATE_URLS`, `CLIP_MASTER_CACHE_TTL_HOURS`, `CLIP_MASTER_MIN_FREE_MB` et `CLIP_MASTER_DEVICE`.
 
 ### Mode IA : avec ou sans clé
 
@@ -106,6 +123,10 @@ Copie `.env.example` en `.env` (l'installeur le fait). Tout est optionnel : voir
 - **Sans clé (mode sans clé)** : les mêmes fonctions utilisent **Ollama en local** : installe [Ollama](https://ollama.com), lance `ollama pull qwen2.5:7b`, c'est tout. Un badge dans la barre du haut indique le mode actif.
 - **La transcription est toujours locale** (faster-whisper) et ne demande jamais de clé.
 - Aucun des deux ? Le temps fort est choisi par énergie audio ; la traduction demande un LLM.
+
+**Qu'est-ce qui quitte ta machine ?** *Sans clé = 100 % local.* **Avec une clé Groq, le texte de la transcription** (sous-titres, moments candidats avec leur score, texte à traduire) **est envoyé à Groq** ; les fichiers vidéo et audio ne le sont jamais. La barre du haut affiche un badge **« Texte envoyé à Groq »** tant que ce mode est actif, et `GET /api/mode` renvoie `sends_text_to_cloud`. Pour rester 100 % local, laisse `GROQ_API_KEY` vide (ou `LLM_PROVIDER=ollama`).
+
+Le directeur de moments vise la durée du preset d'export choisi (TikTok 15-60 s, YouTube Shorts 15-58 s, Instagram Reels 15-60 s ; plafonds 180 / 180 / 90 s) et 8-16 s sans preset.
 
 ## Installer avec un agent IA
 

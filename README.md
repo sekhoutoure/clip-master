@@ -40,7 +40,7 @@ The installer sets up a virtualenv, the Python packages, FFmpeg and Node.js if y
 - **Export presets** for **TikTok, YouTube Shorts and Instagram Reels**: length cap, caption safe zones, caption styles. 1080×1920, 30 fps, -14 LUFS, built-in quality check.
 - **Batch queue**: paste many links or drop many files; items run one by one, can be cancelled or retried, and survive a restart.
 - **French / English UI** with a toggle, and **automatic subtitle translation** (fr, en, es, de, pt, it, ar).
-- **Local first**: nothing is uploaded. Transcription and rendering run on your machine.
+- **Local first**: without a `GROQ_API_KEY` everything runs 100% on your machine (transcription, LLM via Ollama, rendering). With a Groq key, the **transcript text** (not the video or audio) is sent to Groq to pick moments, polish captions and translate; the UI then shows a **"Text sent to Groq"** badge. Downloads from a link obviously contact that site.
 - **GPU when available**: CUDA is detected at startup (`CLIP_MASTER_DEVICE=auto`). Transcription (float16) and subject tracking then run on the GPU; otherwise they stay on CPU (int8). DirectML is not auto-enabled.
 - **Disk cleanup**: workdirs, intermediate files and exports older than 48 hours are purged at startup and periodically (`CLIP_MASTER_CACHE_TTL_HOURS=0` disables the automatic pass). A low-disk guard can refuse new jobs. Use the **Clear cache & old exports** button or `clip-master clean`.
 
@@ -71,6 +71,7 @@ flowchart LR
 | Install | `./install.sh` | `.\install.ps1` |
 | Also install FFmpeg / Node | `./install.sh --yes` | `.\install.ps1 -Yes` |
 | No GPU (small PyTorch) | `./install.sh --cpu-torch` | `.\install.ps1 -CpuTorch` |
+| Exact, reproducible versions | `./install.sh --locked` (Python 3.12, Linux x86_64 / macOS arm64) | `pip install -r requirements-lock\windows-x86_64-py312.txt` in the venv |
 | Check the setup | `./install.sh --check` | `.\install.ps1 -Check` |
 | Start | `./start.sh` | `start.bat` |
 
@@ -85,6 +86,22 @@ Third-party tools (pinned versions, licenses, purpose) are listed in [`third_par
 4. Many videos? Use the **Batch queue** card.
 
 For scripting, everything is available over HTTP (`/api/pull`, `/api/stage/full`, `/api/queue`, …). See [`skills/make-a-short-from-vod/SKILL.md`](skills/make-a-short-from-vod/SKILL.md).
+
+**Scripting requirements.** Every request that changes something (`POST`, `PATCH`, `DELETE`) must carry an `Origin` header equal to the server origin, as a CSRF guard (browsers add it by themselves; `curl` does not). When `CLIP_MASTER_TOKEN` is set, send it as `Authorization: Bearer <token>` or `X-Clip-Master-Token: <token>`: requests authenticated that way do not need `Origin`.
+
+```bash
+curl -s -X POST http://127.0.0.1:7866/api/pull -H 'Origin: http://127.0.0.1:7866' -H 'Content-Type: application/json' \
+     -d '{"url":"https://www.twitch.tv/videos/123456789"}'                         # no token configured
+curl -s -X POST http://192.168.1.20:7866/api/pull -H "Authorization: Bearer $CLIP_MASTER_TOKEN" \
+     -H 'Content-Type: application/json' -d '{"url":"https://www.twitch.tv/videos/123456789"}'   # token configured
+```
+
+### Security
+
+- **Listens on `127.0.0.1` by default.** To reach it from another device, set `CLIP_MASTER_HOST=0.0.0.0` **and** `CLIP_MASTER_TOKEN` (generate one with `python -c "import secrets; print(secrets.token_urlsafe(24))"`). Without a token the server refuses to start. Open `http://<ip>:7866/` and type the token in the login page (or open `http://<ip>:7866/?token=<token>` once, which also lands in the server log): the browser gets an HttpOnly `SameSite=Strict` cookie and the token leaves the address bar. There is no TLS: use a trusted network or a reverse proxy with HTTPS.
+- **SSRF guard.** Source URLs are resolved and refused when they point at private, loopback, link-local, reserved or multicast addresses (IPv4 and IPv6), e.g. `http://169.254.169.254/` or `http://192.168.x.x/`. Opt out with `CLIP_MASTER_ALLOW_PRIVATE_URLS=1`. Limits: the check happens before the download, so a public URL that later redirects to a private address is not caught.
+- Also: strict `Origin`/`Referer` check on mutating requests, `Host` allow-list (DNS rebinding), no shell execution, validated project ids and media paths, upload size limit.
+
 
 ### Export presets
 
@@ -112,6 +129,10 @@ Copy `.env.example` to `.env` (the installer does it). Everything is optional.
 | `CLIP_MASTER_PROJECTS_DIR` / `OUTPUTS_DIR` / `MODELS_DIR` / `BIN_DIR` | under the data dir | Override a single folder |
 | `FFMPEG_PATH`, `TWITCHDOWNLOADER_CLI` | empty | Use a specific binary |
 | `CLIP_MASTER_ALLOWED_HOSTS` | empty | Extra `Host` headers to allow, comma-separated |
+| `CLIP_MASTER_TOKEN` | empty | Access token. **Required** when `CLIP_MASTER_HOST` is not a loopback address (the server refuses to start without it, 16+ characters). Optional on `127.0.0.1` |
+| `CLIP_MASTER_ALLOWED_ORIGINS` | empty | Extra browser origins allowed for mutating requests (e.g. a reverse proxy URL), comma-separated |
+| `CLIP_MASTER_ALLOW_PRIVATE_URLS` | `0` | `1` lets source URLs point at private / loopback / link-local addresses (blocked by default, SSRF guard) |
+| `CLIP_MASTER_LANG` / `CLIP_MASTER_LOG_LEVEL` | `en` / `INFO` | Default language of API error messages (the UI sends its own), log level |
 | `CLIP_MASTER_CACHE_TTL_HOURS` | `48` | Auto-purge age for workdirs, intermediates and exports (`0` disables automatic cleanup) |
 | `CLIP_MASTER_MIN_FREE_MB` | `1024` | Refuse new jobs below this free space (`0` disables the guard) |
 | `CLIP_MASTER_CACHE_SWEEP_SECONDS` | `1800` | Periodic sweep interval (`0` disables the background sweeper) |
@@ -123,6 +144,10 @@ Copy `.env.example` to `.env` (the installer does it). Everything is optional.
 - **Without a key (no-key mode)**: the same features use **local Ollama**: install [Ollama](https://ollama.com), run `ollama pull qwen2.5:7b`, done. A badge in the top bar shows the active mode.
 - **Transcription is always local** (faster-whisper) and never needs a key.
 - Neither available? Highlights fall back to audio-energy heuristics; translation needs an LLM.
+
+**What leaves your machine?** *No key = 100% local.* **With a Groq key, the transcript text** (captions, candidate moments with their scores, and the text to translate) **is sent to Groq**; video and audio files never are. The top bar shows a **"Text sent to Groq"** badge while this mode is active, and `GET /api/mode` returns `sends_text_to_cloud`. To stay fully local, leave `GROQ_API_KEY` empty (or set `LLM_PROVIDER=ollama`).
+
+The highlight director aims for the length range of the chosen export preset (TikTok 15-60 s, YouTube Shorts 15-58 s, Instagram Reels 15-60 s; hard caps stay 180 / 180 / 90 s) and 8-16 s when no preset is chosen.
 
 ## Install with an AI agent
 
