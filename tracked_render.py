@@ -15,6 +15,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -413,9 +414,10 @@ def render_tracked_video(src: Path, s_t: float, e_t: float, track: dict[str, Any
     kw: dict[str, Any] = {}
     if os.name == "nt":
         kw["creationflags"] = 0x08000000
+    errlog = tempfile.TemporaryFile()  # a file, not a pipe: ffmpeg can never block on a full stderr buffer
     ff = subprocess.Popen([ffmpeg, "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{OW}x{OH}",
                            "-r", str(OFPS), "-i", "-", "-c:v", "libx264", "-preset", "veryfast", "-crf", "16",
-                           "-pix_fmt", "yuv420p", str(out_mp4)], stdin=subprocess.PIPE, stderr=subprocess.PIPE, **kw)
+                           "-pix_fmt", "yuv420p", str(out_mp4)], stdin=subprocess.PIPE, stderr=errlog, **kw)
     cw, x0s, cam = track["crop_w"], track["x0"], track["facecam"]
     n = track["n"]
     try:
@@ -433,24 +435,23 @@ def render_tracked_video(src: Path, s_t: float, e_t: float, track: dict[str, Any
                     ox, oy = (OW - iw) // 2, int(OH * 0.06)
                     cv2.rectangle(img, (ox - 6, oy - 6), (ox + iw + 5, oy + ih + 5), (255, 255, 255), -1)
                     img[oy:oy + ih, ox:ox + iw] = face
-            ff.stdin.write(img.tobytes())
+            try:
+                ff.stdin.write(img.tobytes())
+            except (BrokenPipeError, OSError):
+                break  # ffmpeg exited early: its error is reported below
             if progress and j % 60 == 0:
                 progress(int(100 * j / n), f"Compositing 9:16 frame {j}/{n}")
     finally:
-        ff.stdin.close()
-        err = ff.stderr.read().decode("utf-8", "replace") if ff.stderr else ""
+        try:
+            ff.stdin.close()
+        except OSError:
+            pass
         ff.wait()
+        errlog.seek(0)
+        err = errlog.read().decode("utf-8", "replace")
+        errlog.close()
     if ff.returncode != 0 or not out_mp4.exists():
         raise RuntimeError(f"Tracked render failed: {err[-400:]}")
-
-
-def inset_bottom(track: dict[str, Any], inset: bool, inset_width: float) -> int | None:
-    cam = track.get("facecam")
-    if not inset or not cam:
-        return None
-    iw = int(OW * inset_width) // 2 * 2
-    ih = int(iw * cam[3] / max(1, cam[2]))
-    return int(OH * 0.06) + ih + 6
 
 
 def _loudnorm_measure(src: Path, s_t: float, e_t: float, speed: float) -> str:

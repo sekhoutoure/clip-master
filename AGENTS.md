@@ -51,7 +51,7 @@ Install dev tools with `.venv/bin/python -m pip install -r requirements-dev.txt`
 | `batch_queue.py` | Persistent queue (`projects/_queue.json`): cancel, retry, resume after restart |
 | `llm.py` | Groq or local Ollama, `translate_captions`, `llm_status` (the "no-key mode") |
 | `agents_crew.py` | LLM "AI crew": highlight director, caption copywriter |
-| `qc.py`, `audio_align.py`, `profanity.py` | Export QC, audio alignment, optional caption filter |
+| `qc.py`, `profanity.py` | Export QC, optional caption filter |
 | `tools_registry.py` | Tool detection (ffmpeg, TwitchDownloaderCLI, model weights) |
 | `bootstrap.py` | Installer logic + doctor; `third_party/manifest.yml` is its manifest |
 | `clip_master_cli.py` | `clip-master serve | doctor | install` |

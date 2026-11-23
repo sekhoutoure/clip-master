@@ -14,7 +14,6 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-STATUSES = ("queued", "running", "done", "error", "cancelled")
 MAX_ITEMS = 200
 
 Runner = Callable[[dict[str, Any], Callable[[str, int, str, list], None]], dict[str, Any]]

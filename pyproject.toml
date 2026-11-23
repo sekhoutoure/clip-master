@@ -27,7 +27,7 @@ clip-master = "clip_master_cli:main"
 [tool.setuptools]
 # Flat layout: the app is run from a source checkout (static/, remotion/, assets/ live next to the code).
 py-modules = [
-  "agents_crew", "audio_align", "batch_queue", "bootstrap", "clip_master_cli", "config", "llm",
+  "agents_crew", "batch_queue", "bootstrap", "clip_master_cli", "config", "llm",
   "pipeline", "presets", "profanity", "qc", "server", "tools_registry", "tracked_render",
 ]
 
