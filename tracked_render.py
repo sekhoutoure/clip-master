@@ -351,7 +351,8 @@ def analyse_segment(src: Path, s_t: float, e_t: float, project: dict[str, Any], 
             grays.append(cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY))
         if model is not None and j % stride == 0:
             try:
-                r = model.predict(fr, imgsz=640, classes=[0], conf=0.25, verbose=False)[0]
+                from device import yolo_device as _yolo_device
+                r = model.predict(fr, imgsz=640, classes=[0], conf=0.25, verbose=False, device=_yolo_device())[0]
                 dets[j] = [[*map(float, b.xyxy[0].tolist()), float(b.conf[0])] for b in r.boxes]
             except Exception:
                 dets[j] = []

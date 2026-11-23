@@ -287,6 +287,34 @@ def check_third_party(rep: Report, with_reference: bool) -> None:
                 rep.add(st, f"{e['name']} (reference)", detail, "python bootstrap.py --with-reference")
 
 
+def check_device(rep: Report) -> None:
+    try:
+        from device import device_status
+
+        st = device_status()
+        detail = f"{st['device']} — {st['reason']}"
+        if st["device"] == "cpu" and st["requested"] == "cuda":
+            rep.add(WARN, "Compute device", detail)
+        else:
+            rep.add(OK, "Compute device", detail)
+    except Exception as exc:  # pragma: no cover
+        rep.add(INFO, "Compute device", f"could not probe ({exc})")
+
+
+def check_disk(rep: Report) -> None:
+    try:
+        from cache_gc import disk_status_for_app, ttl_hours_from_env
+
+        st = disk_status_for_app()
+        ttl = ttl_hours_from_env()
+        ttl_txt = "auto-clean off" if ttl <= 0 else f"TTL {ttl}h"
+        detail = f"{st['free_mb']} MB free (threshold {st['min_free_mb']} MB, {ttl_txt})"
+        fix = "clip-master clean   or the 'Clear cache & old exports' button"
+        rep.add(OK if st["ok"] else WARN, "Disk space", detail, "" if st["ok"] else fix)
+    except Exception as exc:  # pragma: no cover
+        rep.add(INFO, "Disk space", f"could not probe ({exc})")
+
+
 def doctor(with_reference: bool = False) -> Report:
     rep = Report()
     check_python(rep)
@@ -296,6 +324,8 @@ def doctor(with_reference: bool = False) -> Report:
     check_remotion(rep)
     check_models(rep)
     check_env(rep)
+    check_device(rep)
+    check_disk(rep)
     check_third_party(rep, with_reference)
     return rep
 

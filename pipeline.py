@@ -62,6 +62,12 @@ def project_run_lock(project_id: str) -> threading.Lock:
         return _PROJECT_RUN_LOCKS[project_id]
 
 
+def held_run_locks() -> set[str]:
+    """Project IDs whose mutating job lock is currently held."""
+    with _LOCKS_GUARD:
+        return {pid for pid, lock in _PROJECT_RUN_LOCKS.items() if lock.locked()}
+
+
 def _popen_kwargs() -> dict[str, Any]:
     kw: dict[str, Any] = {}
     if os.name == "nt":
@@ -120,11 +126,14 @@ def get_whisper_model(model_size: str, cpu_threads: int | None = None):
     """Reuse the local transcription model across jobs (expensive to load on CPU)."""
     from faster_whisper import WhisperModel
 
-    key = f"{model_size}:{cpu_threads or 0}"
+    from device import whisper_settings
+
+    hw = whisper_settings()
+    key = f"{model_size}:{hw['device']}:{hw['compute_type']}:{cpu_threads or 0}"
     with _MODEL_CACHE_LOCK:
         if key not in _WHISPER_CACHE:
-            kw: dict[str, Any] = {"device": "cpu", "compute_type": "int8"}
-            if cpu_threads:
+            kw: dict[str, Any] = {"device": hw["device"], "compute_type": hw["compute_type"]}
+            if hw["device"] == "cpu" and cpu_threads:
                 kw["cpu_threads"] = cpu_threads
             _WHISPER_CACHE[key] = WhisperModel(model_size, **kw)
         return _WHISPER_CACHE[key]
@@ -279,6 +288,9 @@ def _stage_01_pull_impl(
     project_id = f"proj_{uuid.uuid4().hex[:8]}"
     pdir = PROJECTS_DIR / project_id
     pdir.mkdir(parents=True, exist_ok=True)
+    import cache_gc as _cache_gc
+    _cache_gc.protect(project_id)
+    _cache_gc.protect(pdir)
     dest_video = pdir / "source.mp4"
 
     active_repos = ["01", "02", "03"]
@@ -439,15 +451,22 @@ def stage_01_pull(
     record_seconds = max(5, min(int(record_seconds or 30), 120))
     before = {p.name for p in PROJECTS_DIR.iterdir()} if PROJECTS_DIR.exists() else set()
     try:
-        return _stage_01_pull_impl(
+        result = _stage_01_pull_impl(
             source_type, url=url, local_file=local_file, title=title, clip_start=clip_start,
             clip_end=clip_end, record_seconds=record_seconds, progress=progress,
         )
+        return result
     except BaseException:
         for p in PROJECTS_DIR.iterdir():
             if p.name not in before and p.is_dir() and not (p / "project.json").exists():
                 shutil.rmtree(p, ignore_errors=True)
         raise
+    finally:
+        import cache_gc as _cache_gc
+        after = {p.name for p in PROJECTS_DIR.iterdir()} if PROJECTS_DIR.exists() else set()
+        for name in after - before:
+            _cache_gc.unprotect(name)
+            _cache_gc.unprotect(PROJECTS_DIR / name)
 
 
 # ---------------------------------------------------------------------------
@@ -679,7 +698,8 @@ def stage_03_track(
         source = "saliency"
         if yolo_model is not None:
             try:
-                res = yolo_model.predict(frame, classes=[0], verbose=False, imgsz=416)
+                from device import yolo_device as _yolo_device
+                res = yolo_model.predict(frame, classes=[0], verbose=False, imgsz=416, device=_yolo_device())
                 if res and len(res[0].boxes) > 0:
                     boxes = res[0].boxes.xyxyn.cpu().numpy()
                     confs = res[0].boxes.conf.cpu().numpy()

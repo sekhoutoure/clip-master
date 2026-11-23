@@ -1,4 +1,4 @@
-"""`clip-master` command line: serve, doctor, install, version."""
+"""`clip-master` command line: serve, doctor, install, clean, version."""
 from __future__ import annotations
 
 import argparse
@@ -34,6 +34,24 @@ def _install(args: argparse.Namespace) -> int:
     return bootstrap.main(["--with-reference"] if args.with_reference else [])
 
 
+def _clean(args: argparse.Namespace) -> int:
+    import json
+
+    import cache_gc
+
+    report = cache_gc.purge_now(all_unused=args.all, ttl_hours=args.ttl, dry_run=args.dry_run)
+    if args.json:
+        print(json.dumps(report, indent=2, default=str))
+    else:
+        prefix = "[dry-run] " if args.dry_run else ""
+        print(f"{prefix}Freed {report['freed_human']} ({len(report['deleted'])} item(s)).")
+        for item in report["deleted"]:
+            print(f"  - {item['reason']}: {item['path']} ({cache_gc.human_bytes(item['bytes'])})")
+        if not report["deleted"]:
+            print("  Nothing to delete (running jobs, the queue file and fresh work are kept).")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="clip-master", description="CLIP MASTER - local 9:16 Shorts studio")
     ap.add_argument("--version", action="version", version=f"clip-master {__version__}")
@@ -53,6 +71,13 @@ def main(argv: list[str] | None = None) -> int:
     i = sub.add_parser("install", help="finish the setup: .env, animated captions, model weights, third-party tools")
     i.add_argument("--with-reference", action="store_true")
     i.set_defaults(fn=_install)
+
+    c = sub.add_parser("clean", help="purge old project workdirs, intermediates and exports")
+    c.add_argument("--all", action="store_true", help="also delete unused work that is still within the TTL")
+    c.add_argument("--ttl", type=int, default=None, help="override CLIP_MASTER_CACHE_TTL_HOURS")
+    c.add_argument("--dry-run", action="store_true", help="list what would be deleted, change nothing")
+    c.add_argument("--json", action="store_true")
+    c.set_defaults(fn=_clean)
 
     args = ap.parse_args(argv)
     return args.fn(args)

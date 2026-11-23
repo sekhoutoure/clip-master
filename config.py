@@ -64,3 +64,18 @@ LLM_TIMEOUT = env_int("LLM_TIMEOUT", 120)
 # --- Limits ------------------------------------------------------------------
 MAX_UPLOAD_MB = env_int("CLIP_MASTER_MAX_UPLOAD_MB", 2048)
 DOWNLOAD_TIMEOUT = env_int("CLIP_MASTER_DOWNLOAD_TIMEOUT", 1800)  # seconds, video download
+
+# --- Disk cleanup / free-space guard ---------------------------------------
+# TTL in hours for automatic purge of old project workdirs, intermediates and exports.
+# 0 disables automatic cleanup (the UI button / `clip-master clean` still work).
+CACHE_TTL_HOURS = env_int("CLIP_MASTER_CACHE_TTL_HOURS", 48)
+# Refuse new jobs when free space on the data volume is below this (MB). 0 disables the guard.
+MIN_FREE_MB = env_int("CLIP_MASTER_MIN_FREE_MB", 1024)
+# Periodic sweep interval in seconds. 0 disables the background sweeper (startup purge still runs if TTL > 0).
+CACHE_SWEEP_SECONDS = env_int("CLIP_MASTER_CACHE_SWEEP_SECONDS", 1800)
+
+# --- Compute device (transcription + subject tracking) ----------------------
+# auto (default) = CUDA when a GPU is visible, otherwise CPU int8.
+# cpu | cuda to force a choice (cuda falls back to CPU if none is found).
+DEVICE = env_str("CLIP_MASTER_DEVICE", "auto").lower()
+

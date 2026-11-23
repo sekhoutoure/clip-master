@@ -17,6 +17,9 @@ os.environ["CLIP_MASTER_PORT"] = "7866"
 os.environ["CLIP_MASTER_HOST"] = "127.0.0.1"
 os.environ["GROQ_API_KEY"] = ""
 os.environ["LLM_PROVIDER"] = "auto"
+os.environ.setdefault("CLIP_MASTER_CACHE_SWEEP_SECONDS", "0")
+os.environ.setdefault("CLIP_MASTER_MIN_FREE_MB", "0")
+os.environ.setdefault("CLIP_MASTER_CACHE_TTL_HOURS", "48")
 sys.path.insert(0, str(ROOT))
 
 ORIGIN = {"Origin": "http://127.0.0.1:7866"}

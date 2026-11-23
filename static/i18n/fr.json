@@ -112,5 +112,13 @@
  "tool.12": "Transcription",
  "tool.14": "Séparation de la voix",
  "tool.18": "Sous-titres animés",
- "tool.20": "Export"
+ "tool.20": "Export",
+ "cache.clear": "Vider le cache & anciens exports",
+ "cache.confirm": "Supprimer les dossiers de travail inutilisés et les anciens exports ? La tâche en cours et le fichier de file d'attente sont conservés.",
+ "cache.freed": "{size} libérés ({n} élément(s)).",
+ "cache.lowDisk": "Espace disque faible : {free} Mo libres (minimum {min} Mo). Vide le cache ou libère de l'espace.",
+ "cache.nothing": "Rien à supprimer. La tâche en cours et le fichier de file d'attente sont conservés.",
+ "mode.gpu": "GPU",
+ "mode.cpu": "CPU",
+ "cache.lowDiskShort": "Disque faible"
 }

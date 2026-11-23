@@ -30,6 +30,7 @@ from pipeline import (
     _project_lock,
     project_run_lock,
     generate_viral_kit,
+    held_run_locks,
     load_project,
     save_project,
     stage_01_pull,
@@ -44,6 +45,8 @@ from pipeline import (
 )
 import tracked_render
 from config import BASE_DIR, HOST, MAX_UPLOAD_MB, PORT
+import cache_gc
+import device
 import llm
 import presets
 from batch_queue import BatchQueue
@@ -54,8 +57,14 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
+    try:
+        cache_gc.auto_purge()
+    except Exception:
+        pass
+    cache_gc.start_sweeper()
     QUEUE.start()
     yield
+    cache_gc.stop_sweeper()
     QUEUE.stop()
 
 
@@ -135,7 +144,34 @@ def _persist_jobs(force: bool = True) -> None:
 JOBS: dict[str, dict[str, Any]] = _load_jobs()
 
 
+def _ensure_disk() -> dict:
+    """Refuse new work when the data volume is below the configured free-space floor."""
+    st = cache_gc.disk_status_for_app()
+    if not st["ok"]:
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                f"Espace disque insuffisant ({st['free_mb']} Mo libres, "
+                f"minimum {st['min_free_mb']} Mo). Vide le cache ou libère de l'espace."
+            ),
+        )
+    return st
+
+
+def _runtime_protect() -> list[str]:
+    ids = set(held_run_locks())
+    with _JOBS_LOCK:
+        for j in JOBS.values():
+            if j.get("status") == "running" and j.get("project_id"):
+                ids.add(str(j["project_id"]))
+    for it in QUEUE.list():
+        if it.get("status") in ("running", "queued") and it.get("project_id"):
+            ids.add(str(it["project_id"]))
+    return list(ids)
+
+
 def _create_job(kind: str) -> str:
+    _ensure_disk()
     with _JOBS_LOCK:
         running = sum(1 for j in JOBS.values() if j.get("status") == "running") + (1 if QUEUE.is_running() else 0)
         if running >= MAX_CONCURRENT_JOBS:
@@ -209,10 +245,21 @@ def _update_job(jid: str, stage: str, percent: int, message: str, active_repos: 
             )
 
 
+def _remember_job_project(jid: str, pid: str | None) -> None:
+    if not pid:
+        return
+    with _JOBS_LOCK:
+        if jid in JOBS:
+            JOBS[jid]["project_id"] = pid
+
+
 def _run_bg(jid: str, fn, *args, **kwargs) -> None:
     target_pid = kwargs.get("project_id")
 
     def worker():
+        if target_pid:
+            _remember_job_project(jid, target_pid)
+            cache_gc.protect(target_pid)
         try:
             if target_pid:
                 validate_project_id(target_pid)
@@ -220,6 +267,12 @@ def _run_bg(jid: str, fn, *args, **kwargs) -> None:
                     res = fn(*args, progress=lambda s, p, m, r: _update_job(jid, s, p, m, r), **kwargs)
             else:
                 res = fn(*args, progress=lambda s, p, m, r: _update_job(jid, s, p, m, r), **kwargs)
+            pid = None
+            if isinstance(res, dict):
+                pid = res.get("project_id") or res.get("id")
+                if isinstance(res.get("project"), dict):
+                    pid = pid or res["project"].get("id")
+            _remember_job_project(jid, pid)
             with _JOBS_LOCK:
                 JOBS[jid]["status"] = "done"
                 JOBS[jid]["percent"] = 100
@@ -234,6 +287,8 @@ def _run_bg(jid: str, fn, *args, **kwargs) -> None:
                 JOBS[jid]["updated_at"] = time.time()
                 _persist_jobs()
         finally:
+            if target_pid:
+                cache_gc.unprotect(target_pid)
             threading.Timer(4.0, clear_active_agents).start()
 
     t = threading.Thread(target=worker, daemon=True)
@@ -303,6 +358,7 @@ def api_queue():
 def api_queue_add(req: QueueAddRequest):
     from pipeline import validate_source_url
 
+    _ensure_disk()
     try:
         urls = [validate_source_url(u) for u in req.urls]
     except ValueError as exc:
@@ -316,6 +372,7 @@ def api_queue_add(req: QueueAddRequest):
 
 @app.post("/api/queue/upload")
 async def api_queue_upload(file: UploadFile = File(...), options: str = Form(default="{}")):
+    _ensure_disk()
     try:
         opts = QueueOptions(**json.loads(options or "{}")).model_dump()
     except Exception:
@@ -473,8 +530,32 @@ def api_presets():
 
 @app.get("/api/mode")
 def api_mode():
-    """Active LLM mode (cloud / local / off) for the UI badge."""
-    return llm.llm_status()
+    """Active LLM mode (cloud / local / off), compute device and disk for the UI badge."""
+    status = llm.llm_status()
+    status["device"] = device.device_status()
+    status["disk"] = cache_gc.disk_status_for_app()
+    return status
+
+
+@app.get("/api/cache")
+def api_cache_status():
+    return {
+        "disk": cache_gc.disk_status_for_app(),
+        "ttl_hours": cache_gc.ttl_hours_from_env(),
+        "min_free_mb": cache_gc.min_free_mb_from_env(),
+        "last_purge": cache_gc.last_purge(),
+    }
+
+
+@app.post("/api/cache/clean")
+def api_cache_clean(all: bool = False):
+    """Purge old (or, with all=true, all unused) workdirs, intermediates and exports.
+
+    Never deletes the queue file or a currently running job.
+    """
+    report = cache_gc.purge_now(all_unused=all, protect=_runtime_protect())
+    report["disk"] = cache_gc.disk_status_for_app()
+    return report
 
 
 @app.get("/api/repos")
@@ -770,6 +851,8 @@ def api_health():
         "tools_note": "tools_ready = fonctions installées et prêtes à s'exécuter.",
         "projects_count": len(projects),
         "exports_count": len(outputs),
+        "disk": cache_gc.disk_status_for_app(),
+        "device": device.device_status(),
     }
 
 

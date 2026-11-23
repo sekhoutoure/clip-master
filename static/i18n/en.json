@@ -112,5 +112,13 @@
  "tool.12": "Transcription",
  "tool.14": "Voice split",
  "tool.18": "Animated captions",
- "tool.20": "Export"
+ "tool.20": "Export",
+ "cache.clear": "Clear cache & old exports",
+ "cache.confirm": "Delete unused project workdirs and old exports? The current job and the queue file are kept.",
+ "cache.freed": "Freed {size} ({n} item(s)).",
+ "cache.lowDisk": "Low disk space: {free} MB free (minimum {min} MB). Clear the cache or free some space.",
+ "cache.nothing": "Nothing to delete. The current job and the queue file are kept.",
+ "mode.gpu": "GPU",
+ "mode.cpu": "CPU",
+ "cache.lowDiskShort": "Low disk"
 }

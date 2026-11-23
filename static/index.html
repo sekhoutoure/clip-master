@@ -22,6 +22,7 @@
       </div>
       <div class="topbar-actions">
         <span class="llm-badge" id="llmBadge" data-i18n-title="mode.tip" title="">&hellip;</span>
+        <span class="llm-badge warn hidden" id="diskWarn" hidden></span>
         <button class="mode-tab" id="btnLang" onclick="toggleLang()" title="FR / EN" aria-label="Language">EN</button>
         <button class="mode-tab" id="btnAvance" onclick="toggleAvance()" title="Outils avancés" data-i18n="top.advanced">Avancé</button>
         <button class="mode-tab sr-only" id="btnUiSimple" onclick="setUiMode('simple')" tabindex="-1">SIMPLE</button>
@@ -335,6 +336,7 @@
         <div class="cap-mini-actions">
           <button class="cap-mini-btn" onclick="copyViralKit()" data-i18n="copyTitle">Copier titre</button>
           <button class="cap-mini-btn" onclick="openOutputsFolder()" data-i18n="folder">Dossier</button>
+          <button class="cap-mini-btn" onclick="clearCacheAndExports()" data-i18n="cache.clear">Vider le cache & anciens exports</button>
         </div>
       </div>
       <div class="publish-grid">

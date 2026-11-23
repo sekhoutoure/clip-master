@@ -54,9 +54,52 @@ function renderMode() {
   if (!badge || !m) return;
   let label = t('mode.' + m.mode);
   if (m.mode === 'local' && !m.ready) label = t('mode.localNotReady');
-  badge.textContent = label + (m.model && m.mode !== 'off' ? ' · ' + m.model : '');
+  const dev = m.device || {};
+  const devLabel = dev.device === 'cuda' ? t('mode.gpu') : t('mode.cpu');
+  badge.textContent = label + (m.model && m.mode !== 'off' ? ' · ' + m.model : '') + ' · ' + devLabel;
   badge.className = 'llm-badge ' + (m.ready ? 'ok' : (m.mode === 'off' ? 'off' : 'warn'));
-  badge.title = t('mode.tip') + (m.hint ? '\n' + m.hint : '');
+  badge.title = t('mode.tip') + (m.hint ? '\n' + m.hint : '') + (dev.reason ? '\n' + dev.reason : '');
+  const warn = document.getElementById('diskWarn');
+  if (warn) {
+    const disk = m.disk || {};
+    if (disk.ok === false) {
+      warn.hidden = false;
+      warn.classList.remove('hidden');
+      warn.textContent = t('cache.lowDiskShort');
+      warn.title = t('cache.lowDisk', { free: disk.free_mb, min: disk.min_free_mb });
+    } else {
+      warn.hidden = true;
+      warn.classList.add('hidden');
+      warn.textContent = '';
+    }
+  }
+}
+
+async function clearCacheAndExports() {
+  if (!confirm(t('cache.confirm'))) return;
+  const res = await fetch('/api/cache/clean?all=true', { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    showToast(t('msg.refused', { label: t('cache.clear'), status: res.status, detail: data.detail || '' }), 'error');
+    return;
+  }
+  const n = (data.deleted || []).length;
+  showToast(n ? t('cache.freed', { size: data.freed_human || '0 B', n }) : t('cache.nothing'), n ? 'ok' : '');
+  if (typeof logTelemetry === 'function') {
+    logTelemetry(t('tel.system'), `Cache clean: ${data.freed_human || '0 B'}`, '#0e9f8e');
+  }
+  if (typeof refreshProjectsList === 'function') {
+    const list = await refreshProjectsList();
+    const still = state.project && list.some(p => p.id === state.project.id);
+    if (!still) {
+      state.project = null;
+      if (typeof loadLatestProject === 'function') await loadLatestProject();
+    } else if (state.project && typeof applyProject === 'function') {
+      const pRes = await fetch('/api/projects/' + encodeURIComponent(state.project.id));
+      if (pRes.ok) applyProject(await pRes.json());
+    }
+  }
+  refreshMode();
 }
 
 // ---- Batch queue -----------------------------------------------------------
