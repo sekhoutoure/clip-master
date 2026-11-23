@@ -16,7 +16,10 @@ classifiers = [
   "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
   "Topic :: Multimedia :: Video",
 ]
-dynamic = ["dependencies", "optional-dependencies"]
+dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+dev = ["pytest~=9.0", "httpx~=0.28", "ruff>=0.8"]
 
 [project.scripts]
 clip-master = "clip_master_cli:main"
@@ -30,7 +33,6 @@ py-modules = [
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
-optional-dependencies.dev = { file = ["requirements-dev.txt"] }
 
 [tool.ruff]
 line-length = 140

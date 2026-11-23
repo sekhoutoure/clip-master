@@ -1,0 +1,12 @@
+---
+description: CLIP MASTER project rules (setup, verify, conventions)
+alwaysApply: true
+---
+
+Read `AGENTS.md` at the repo root first: it has the install/verify commands and the code map.
+
+- Install: `./install.sh --yes` (Windows: `.\install.ps1 -Yes`). Verify: `./install.sh --check`, `ruff check .`, `pytest -m "not slow"`.
+- UI strings need keys in both `static/i18n/fr.json` and `static/i18n/en.json`.
+- Validate URLs/times before any subprocess; no `shell=True`; pass `--` before URLs.
+- No brand/campaign-specific code. No vendored third-party code (use `third_party/manifest.yml`).
+- Task recipes: `skills/*/SKILL.md`.
