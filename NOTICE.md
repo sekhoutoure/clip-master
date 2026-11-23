@@ -75,3 +75,18 @@ Their code is neither bundled nor required.
 All product names are trademarks of their respective owners. CLIP MASTER is an independent project and is not
 affiliated with, endorsed by or sponsored by any of the projects, platforms or companies named in this file or
 by any game publisher, streamer or platform whose content you may clip.
+
+
+## Tools fetched by the installer (`third_party/`)
+
+`third_party/manifest.yml` is the machine-readable list (name, URL, pinned tag or commit, license, purpose). The installer downloads
+these onto the user's machine; **none of their code is stored in this repository**.
+
+- **TwitchDownloaderCLI** 1.56.5 (MIT): release binary, checksum-verified, used for optional Twitch VOD + chat download.
+- **Reference-only sources** (`--with-reference`, not used at runtime): SAM 2 (Apache-2.0), FunClip (MIT), ClipsAI (MIT),
+  WhisperX (BSD-2-Clause), OpenCut (MIT), silero-vad (MIT), Practical-RIFE (MIT, code only: model weights have their own terms),
+  auto-subtitle (MIT), MoviePy (MIT).
+- **Deliberately not fetched**: `remotion-dev/skills` (no license file), LosslessCut (GPL-2.0-only, idea re-implemented with
+  `ffmpeg -c copy`), Video2X (AGPL-3.0, about 1 GB, not used).
+
+Model weights downloaded on first use: `yolov8n.pt` (Ultralytics assets, AGPL-3.0) and the MediaPipe BlazeFace short-range model (Apache-2.0).

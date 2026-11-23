@@ -1,75 +1,149 @@
+<div align="center">
+
 # CLIP MASTER
 
-**Studio local de Shorts 9:16** : colle une URL ou charge une vidéo, CLIP MASTER trouve le meilleur moment, suit le sujet, ajoute des sous-titres et exporte un Short prêt à publier.
-*English version below.*
+**Turn any long video into a captioned 9:16 Short, on your own machine.**
+Find the best moment, track the subject, burn the captions, export for TikTok, YouTube Shorts or Instagram Reels.
 
-## Fonctionnalités
+[![CI](https://github.com/OWNER/clip-master/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/clip-master/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Python 3.10-3.12](https://img.shields.io/badge/python-3.10--3.12-blue.svg)](#requirements)
+[![Release](https://img.shields.io/github/v/release/OWNER/clip-master?include_prereleases)](https://github.com/OWNER/clip-master/releases)
+[![No API key needed](https://img.shields.io/badge/API%20key-not%20required-brightgreen.svg)](#ai-mode-with-or-without-a-key)
 
-- **Import** : URL (yt-dlp), enregistrement de live (Streamlink), VOD Twitch + chat (TwitchDownloader, optionnel) ou fichier MP4 local.
-- **Détection** : coupes de scène (PySceneDetect), silences (auto-editor), moments forts (énergie audio + LLM).
-- **Suivi** : visage de la facecam (MediaPipe) et sujet de jeu (YOLO) pour recadrer en 9:16, avec facecam en incrustation.
-- **Sous-titres** : transcription locale mot à mot (faster-whisper), styles TikTok, rendu ASS ou Remotion (optionnel).
-- **Export** : H.264 1080×1920 30 fps, loudness −14 LUFS, ralenti fluide, barre de rétention, contrôle qualité (QC).
-- **Équipe IA** : un « directeur » LLM choisit le moment et écrit titre / accroche / hashtags (Groq, ou Ollama en local).
+English | [Français](README.fr.md)
 
-## Prérequis
+![Demo: a generated 16:9 source and the 9:16 Short CLIP MASTER makes from it](docs/media/demo.gif)
 
-- **Python 3.10 – 3.12** (MediaPipe et PyTorch n'ont pas encore de roues pour toutes les versions plus récentes)
-- **FFmpeg** dans le PATH (`winget install Gyan.FFmpeg`) ou `FFMPEG_PATH` dans `.env`
-- **Node.js 20+** *(optionnel, seulement pour le rendu Remotion)*
-- Clé **Groq** *(optionnelle)* ou serveur **Ollama** local pour l'équipe IA
+<sub>Demo made from generated media only. [MP4 version](docs/media/demo.mp4) · [UI screenshot](docs/media/ui.png)</sub>
+
+</div>
+
+## Quick start
+
+```bash
+git clone https://github.com/OWNER/clip-master && cd clip-master
+./install.sh            # Windows: .\install.ps1
+./start.sh              # Windows: start.bat   ->  http://127.0.0.1:7866
+```
+
+The installer sets up a virtualenv, the Python packages, FFmpeg and Node.js if you allow it (`--yes`), the model weights and the third-party tools. It is safe to run again. `./install.sh --check` tells you what is missing.
+
+**Using a coding agent?** See [Install with an AI agent](#install-with-an-ai-agent).
+
+## Features
+
+- **Import** from a link (yt-dlp: YouTube, Twitch, X and [many more](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)), a live stream (Streamlink), a Twitch VOD with chat (TwitchDownloader) or a local MP4.
+- **Find the moment**: scene cuts (PySceneDetect), silence removal (auto-editor), highlight picking from audio energy and an optional LLM director.
+- **Track the subject**: MediaPipe finds the facecam, YOLO follows the action; the 9:16 crop follows it with the facecam inset on top.
+- **Captions**: local word-level transcription (faster-whisper), TikTok-style presets, editable in the UI, optional Remotion animated captions.
+- **Export presets** for **TikTok, YouTube Shorts and Instagram Reels**: length cap, caption safe zones, caption styles. 1080×1920, 30 fps, -14 LUFS, built-in quality check.
+- **Batch queue**: paste many links or drop many files; items run one by one, can be cancelled or retried, and survive a restart.
+- **French / English UI** with a toggle, and **automatic subtitle translation** (fr, en, es, de, pt, it, ar).
+- **Local first**: nothing is uploaded. Transcription and rendering run on your machine.
+
+## Requirements
+
+| | |
+|---|---|
+| Python | 3.10 to 3.12 (3.13 may lack MediaPipe / PyTorch wheels) |
+| FFmpeg | with libass; the installer can install it, or it falls back to the bundled `imageio-ffmpeg` |
+| Node.js 18+ | optional, only for Remotion animated captions |
+| Disk / RAM | several GB of disk (much less with the PyTorch CPU build, `--cpu-torch`), 8 GB RAM recommended |
+| Internet | first install only (packages, model weights), then for downloading videos |
 
 ## Installation
 
-### Windows
+| | Linux / macOS | Windows (PowerShell) |
+|---|---|---|
+| Install | `./install.sh` | `.\install.ps1` |
+| Also install FFmpeg / Node | `./install.sh --yes` | `.\install.ps1 -Yes` |
+| No GPU (small PyTorch) | `./install.sh --cpu-torch` | `.\install.ps1 -CpuTorch` |
+| Check the setup | `./install.sh --check` | `.\install.ps1 -Check` |
+| Start | `./start.sh` | `start.bat` |
 
-1. Installe Python, FFmpeg et (optionnel) Node.js.
-2. Télécharge le dépôt, puis double-clique sur **`start.bat`** : il crée le venv, installe les dépendances, vérifie FFmpeg et Node, fait `npm install` dans `remotion/`, lance le serveur et ouvre le navigateur sur http://127.0.0.1:7866.
+Also available once installed: `clip-master serve`, `clip-master doctor`, `clip-master install`.
+Third-party tools (pinned versions, licenses, purpose) are listed in [`third_party/manifest.yml`](third_party/manifest.yml). They are downloaded on your machine, never stored in this repository. Add `--with-reference` to also fetch the reference-only sources.
 
-### Linux / macOS
+## Usage
 
-```bash
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env            # puis édite .env si besoin
-(cd remotion && npm install)    # optionnel
-python server.py                # http://127.0.0.1:7866
+1. **Import**: paste a link or drop an MP4.
+2. **Style**: *Standard* (facecam + game) or *Tracked* (the crop follows the subject). Pick a **Platform** (TikTok, YouTube Shorts, Instagram Reels) and, optionally, a language to translate the subtitles.
+3. **Create the Short**. The file lands in `outputs/`, with a title and hashtags ready to copy.
+4. Many videos? Use the **Batch queue** card.
+
+For scripting, everything is available over HTTP (`/api/pull`, `/api/stage/full`, `/api/queue`, …). See [`skills/make-a-short-from-vod/SKILL.md`](skills/make-a-short-from-vod/SKILL.md).
+
+### Export presets
+
+| Preset | Max length | Bottom area kept clear | Default caption style |
+|---|---|---|---|
+| TikTok | 180 s | 22% | `tiktok_white` |
+| YouTube Shorts | 180 s | 18% | `white` |
+| Instagram Reels | 90 s | 24% | `white` |
+
+Values live in [`presets.py`](presets.py); platforms change their limits, so adjust them there.
+
+## Configuration
+
+Copy `.env.example` to `.env` (the installer does it). Everything is optional.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GROQ_API_KEY` | empty | Cloud LLM. Empty = local Ollama |
+| `LLM_PROVIDER` | `auto` | `auto`, `groq`, `ollama` or `none` |
+| `OLLAMA_URL` / `OLLAMA_MODEL` | `http://localhost:11434` / `qwen2.5:7b` | Local LLM |
+| `CLIP_MASTER_HOST` / `CLIP_MASTER_PORT` | `127.0.0.1` / `7866` | Where the app listens |
+| `CLIP_MASTER_MAX_UPLOAD_MB` | `2048` | Upload size limit |
+| `CLIP_MASTER_DOWNLOAD_TIMEOUT` | `1800` | Download timeout in seconds |
+| `CLIP_MASTER_DATA_DIR` | repo folder | Where `projects/`, `outputs/`, `models/` live |
+| `FFMPEG_PATH`, `TWITCHDOWNLOADER_CLI` | empty | Use a specific binary |
+
+### AI mode: with or without a key
+
+- **With `GROQ_API_KEY`**: highlight selection, caption polish and translation use Groq.
+- **Without a key (no-key mode)**: the same features use **local Ollama**: install [Ollama](https://ollama.com), run `ollama pull qwen2.5:7b`, done. A badge in the top bar shows the active mode.
+- **Transcription is always local** (faster-whisper) and never needs a key.
+- Neither available? Highlights fall back to audio-energy heuristics; translation needs an LLM.
+
+## Install with an AI agent
+
+Give your coding agent (Claude Code, Cursor, Codex, Copilot, Aider…) this prompt:
+
+```text
+Install CLIP MASTER on this machine: clone https://github.com/OWNER/clip-master, read AGENTS.md,
+then run the installer (./install.sh --yes, or .\install.ps1 -Yes on Windows) and the doctor
+(./install.sh --check). Fix anything the doctor reports, run the tests (pytest -m "not slow"),
+start the app and tell me the URL. Do not ask me for API keys: the app works without one.
 ```
 
-Les poids YOLO et le modèle de visage MediaPipe sont téléchargés automatiquement au premier usage dans `models/`.
+The repo ships [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), a Cursor rule and task skills in [`skills/`](skills) (mirrored in `.claude/skills/`): `install-clip-master`, `make-a-short-from-vod`, `batch-clips`, `export-presets`, `troubleshoot`.
 
-## Utilisation
+## FAQ and troubleshooting
 
-1. **Importer** : colle une URL ou charge un MP4.
-2. **Style** : *Standard* (facecam + jeu), *Suivi* (crop YOLO + facecam), *9:16*.
-3. **Créer le Short** : le pipeline enchaîne détection, suivi, sous-titres et export. Le résultat est dans `outputs/`.
-4. Le mode **Avancé** donne accès aux étapes manuelles, à Whisper, Demucs, Remotion, etc.
+**Do I need an API key?** No. See [AI mode](#ai-mode-with-or-without-a-key).
 
-Tous les réglages se font dans `.env` (voir `.env.example`). Rien n'est stocké hors de ton disque, sauf les appels au LLM si tu actives Groq.
+**`FFmpeg not found` or captions are missing in the export.** Install a full FFmpeg (`winget install Gyan.FFmpeg`, `brew install ffmpeg`, `sudo apt install ffmpeg`) or set `FFMPEG_PATH`.
 
-## Avertissement
+**The install is very large.** Use `--cpu-torch` if you have no GPU.
 
-**Tu dois avoir les droits sur les contenus que tu découpes** (accord du créateur, licence, usage autorisé par la plateforme). CLIP MASTER est un outil : tu es responsable de ce que tu importes, transformes et publies, et du respect des conditions des plateformes. Le projet n'est affilié à aucune plateforme, éditeur de jeu ou créateur.
+**A download fails (403, sign-in required).** Update yt-dlp (`pip install -U yt-dlp` in `.venv`), try a direct link, or download the file yourself and upload the MP4.
 
-## Licence
+**The badge says "Local · Ollama unavailable".** Start Ollama and run `ollama pull qwen2.5:7b`, or add a Groq key, or set `LLM_PROVIDER=none`.
 
-**AGPL-3.0** (voir `LICENSE`), car YOLO (Ultralytics, AGPL-3.0) est une dépendance directe. Les crédits et licences des outils tiers sont dans `NOTICE.md`.
-**Remotion** (optionnel) n'est pas sous licence OSI : gratuit pour les particuliers et petites structures, licence payante pour les grandes sociétés. Voir https://github.com/remotion-dev/remotion/blob/main/LICENSE.md.
+**Is it legal to clip any video?** Only process content you have the rights to (your own, licensed, or allowed by the creator and the platform). You are responsible for what you import, transform and publish. This project is not affiliated with any platform, game publisher or creator.
 
----
+More cases: [`skills/troubleshoot/SKILL.md`](skills/troubleshoot/SKILL.md). Run `./install.sh --check` and include its output in bug reports.
 
-# English
+## Contributing
 
-**Local 9:16 Shorts studio**: paste a URL or load a video; CLIP MASTER finds the best moment, tracks the subject, burns captions and exports a ready-to-post Short.
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Quick loop: `ruff check .` and `pytest -m "not slow"`. Changes are tracked in [CHANGELOG.md](CHANGELOG.md).
 
-**Features** — import (yt-dlp, Streamlink, Twitch VOD, local MP4) · scene/silence/highlight detection · MediaPipe + YOLO tracking with facecam inset · local word-level transcription (faster-whisper) · 1080×1920 30 fps export with −14 LUFS loudness and QC · optional LLM "AI crew" (Groq or local Ollama).
+## License
 
-**Prerequisites** — Python 3.10–3.12, FFmpeg in PATH (or `FFMPEG_PATH`), Node.js 20+ (optional, Remotion only).
+[AGPL-3.0](LICENSE). Ultralytics YOLO (AGPL-3.0) is a direct dependency, so the whole project is AGPL-3.0. If you run a modified version as a network service, you must offer its source to its users.
+**Remotion** (optional) is source-available: free for individuals and small teams, a paid license applies to larger companies ([terms](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md)).
 
-**Install** — Windows: double-click `start.bat`. Linux/macOS: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && cp .env.example .env && python server.py`, then open http://127.0.0.1:7866. YOLO weights and the face model download on first use.
+## Credits
 
-**Usage** — Import → pick a style (Standard / Tracked / 9:16) → *Créer le Short*. Outputs land in `outputs/`. Settings live in `.env`.
-
-**Disclaimer** — You must have the rights to any content you clip. You are responsible for what you import, transform and publish and for complying with platform terms. This project is not affiliated with any platform, game publisher or creator.
-
-**License** — AGPL-3.0 (YOLO/Ultralytics is an AGPL dependency). Third-party credits in `NOTICE.md`. **Remotion** is source-available (free for individuals and small teams, paid license for larger companies): https://github.com/remotion-dev/remotion/blob/main/LICENSE.md.
+CLIP MASTER stands on [FFmpeg](https://ffmpeg.org), [yt-dlp](https://github.com/yt-dlp/yt-dlp), [Streamlink](https://github.com/streamlink/streamlink), [TwitchDownloader](https://github.com/lay295/TwitchDownloader), [PySceneDetect](https://github.com/Breakthrough/PySceneDetect), [auto-editor](https://github.com/WyattBlue/auto-editor), [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [MediaPipe](https://github.com/google-ai-edge/mediapipe), [Ultralytics](https://github.com/ultralytics/ultralytics), [Demucs](https://github.com/facebookresearch/demucs), [Remotion](https://github.com/remotion-dev/remotion), [FastAPI](https://fastapi.tiangolo.com), and was inspired by FunClip, ClipsAI, WhisperX, OpenCut and others. Full list, licenses and trademark notes: [NOTICE.md](NOTICE.md).
