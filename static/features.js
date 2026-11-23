@@ -59,6 +59,14 @@ function renderMode() {
   badge.textContent = label + (m.model && m.mode !== 'off' ? ' · ' + m.model : '') + ' · ' + devLabel;
   badge.className = 'llm-badge ' + (m.ready ? 'ok' : (m.mode === 'off' ? 'off' : 'warn'));
   badge.title = t('mode.tip') + (m.hint ? '\n' + m.hint : '') + (dev.reason ? '\n' + dev.reason : '');
+  const cloud = document.getElementById('cloudNotice');
+  if (cloud) {
+    const on = !!m.sends_text_to_cloud;
+    cloud.hidden = !on;
+    cloud.classList.toggle('hidden', !on);
+    cloud.textContent = on ? t('mode.cloudNoticeShort') : '';
+    cloud.title = on ? t('mode.cloudNotice') : '';
+  }
   const warn = document.getElementById('diskWarn');
   if (warn) {
     const disk = m.disk || {};

@@ -19,6 +19,7 @@ from pipeline import (
 )
 
 import llm as _llm
+import presets
 from llm import call_llm_json  # noqa: F401  (re-exported)
 
 _EVENTS_LOCK = threading.Lock()
@@ -91,12 +92,36 @@ def get_live_agent_state(since_seq: int = 0) -> dict[str, Any]:
     }
 
 
+def director_system_prompt(win_lo: float, win_hi: float) -> str:
+    """System prompt of the LLM highlight director; the window comes from the active export preset."""
+    return (
+        "You are the AI Viral Video Director (LLM) for CLIP MASTER. "
+        "Given video duration, candidate audio/cut moments, and transcript segments, choose the single best viral Short highlight window "
+        f"({win_lo:g} to {win_hi:g} seconds long), "
+        "give each of the 3 moments a short uppercase 1-2 word semantic label (max 12 chars, e.g. 'VICE_CHASE', 'HOOK_INTRO', 'CLIMAX'), "
+        "and write a punchy viral title, hook, and hashtags."
+    )
+
+
+def clamp_highlight(h_start: float, h_end: float, dur: float, win_lo: float, win_hi: float) -> tuple[float, float]:
+    """Force the LLM's highlight into [win_lo, win_hi] seconds (never past the video, at least 3 s)."""
+    h_start = round(max(0.0, min(dur - 3.0, h_start)), 2)
+    h_end = round(max(h_start + 3.0, min(dur, h_end)), 2)
+    if h_end - h_start > win_hi:
+        h_end = round(h_start + win_hi, 2)
+    elif h_end - h_start < win_lo:
+        h_end = round(min(dur, h_start + win_lo), 2)
+        h_start = round(max(0.0, min(h_start, h_end - win_lo)), 2)
+    return h_start, h_end
+
+
 # ---------------------------------------------------------------------------
 # REAL AUTONOMOUS MULTI-AGENT WORKFLOW
 # ---------------------------------------------------------------------------
 def run_autonomous_agent_crew(
     project_id: str,
     export_mp4: bool = True,
+    export_preset: str | None = None,
     progress: Callable[[str, int, str, list[str]], None] | None = None,
 ) -> dict[str, Any]:
     """Execute real CV + LLM multi-agent editorial crew on a loaded project:
@@ -108,6 +133,7 @@ def run_autonomous_agent_crew(
     6. Render: encodes the final 9:16 H.264 Short if export_mp4=True.
     """
     clear_active_agents()
+    win_lo, win_hi = presets.highlight_window(export_preset)  # raises early on an unknown preset
     project = load_project(project_id)
     dur = float(project["info"]["duration"] or 15.0)
     # Tracked mode (followed crop + facecam inset + QC) when enabled in the project's options
@@ -183,12 +209,7 @@ def run_autonomous_agent_crew(
             {"idx": i, "start": m["start"], "end": m["end"], "rms_score": m["score"]}
             for i, m in enumerate(moments)
         ]
-        sys_p = (
-            "You are the AI Viral Video Director (LLM) for CLIP MASTER. "
-            "Given video duration, candidate audio/cut moments, and transcript segments, choose the single best viral Short highlight window (8 to 16 seconds), "
-            "give each of the 3 moments a short uppercase 1-2 word semantic label (max 12 chars, e.g. 'VICE_CHASE', 'HOOK_INTRO', 'CLIMAX'), "
-            "and write a punchy viral title, hook, and hashtags."
-        )
+        sys_p = director_system_prompt(win_lo, win_hi)
         usr_p = json.dumps(
             {
                 "video_name": project.get("name"),
@@ -199,7 +220,7 @@ def run_autonomous_agent_crew(
                 "required_json_schema": {
                     "selected_moment_index": 0,
                     "highlight_start": 0.0,
-                    "highlight_end": 15.0,
+                    "highlight_end": round(win_lo + (win_hi - win_lo) / 2, 1),
                     "moment_labels": ["LABEL_1", "LABEL_2", "LABEL_3"],
                     "director_reason": "short explanation",
                     "viral_title": "title with #Shorts",
@@ -227,8 +248,8 @@ def run_autonomous_agent_crew(
         sel_idx = max(0, min(len(moments) - 1, sel_idx)) if moments else 0
         h_start = float(llm_director.get("highlight_start", moments[sel_idx]["start"] if moments else 0.0))
         h_end = float(llm_director.get("highlight_end", moments[sel_idx]["end"] if moments else min(dur, 15.0)))
-        h_start = round(max(0.0, min(dur - 3.0, h_start)), 2)
-        h_end = round(max(h_start + 3.0, min(dur, h_end)), 2)
+        # Keep the LLM's window inside the target range of the active preset (default 8-16 s without a preset)
+        h_start, h_end = clamp_highlight(h_start, h_end, dur, win_lo, win_hi)
         h_score = moments[sel_idx]["score"] if moments else 0.85
 
         project["highlight"] = {
@@ -368,7 +389,7 @@ def run_autonomous_agent_crew(
         emit_agent_event(
             "20", "20 Export", "SHIP", "pink", "#ee1d6c",
             "#btnExport",
-            f"Encoding {hl['start']}s–{min(hl['end'], hl['start']+14):.1f}s ({chosen_layout})...",
+            f"Encoding {hl['start']}s–{min(hl['end'], hl['start'] + (win_hi if export_preset else 14.0)):.1f}s ({chosen_layout})...",
             "libx264 1080x1920 + libass + loudnorm -14 LUFS + 48kHz AAC",
             x_norm=0.5, y_norm=0.5, model="export",
         )
@@ -383,8 +404,9 @@ def run_autonomous_agent_crew(
             font_size=project["font_size"],
             caption_style=project.get("caption_style", "pink"),
             start_sec=hl["start"],
-            end_sec=min(hl["end"], hl["start"] + (45.0 if tracked_mode else 14.0)),
+            end_sec=min(hl["end"], hl["start"] + (win_hi if export_preset else (45.0 if tracked_mode else 14.0))),
             tracked=t_opts,
+            export_preset=export_preset,
             progress=progress,
         )
         exp = ship_res.get("export") or {}

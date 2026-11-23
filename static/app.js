@@ -1368,7 +1368,7 @@ class RealAgentOverlayController {
       const res = await fetch('/api/agents/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: state.project.id, export_mp4: true }),
+        body: JSON.stringify({ project_id: state.project.id, export_mp4: true, export_preset: (typeof selectedExportPreset === 'function' ? selectedExportPreset() : null) }),
       });
       const jobId = await extractJobId(res, 'AI CREW');
       if (!jobId) return;

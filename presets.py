@@ -4,6 +4,9 @@ All three platforms take 1080x1920 (9:16). The presets differ in the maximum cli
 the caption *safe zone* (the part of the frame not covered by the app's own buttons, title and
 progress bar) and the caption styles that look right there.
 
+``max_duration`` is the hard cap enforced at export; ``target_window`` is the length range (seconds) the highlight
+director aims for (a sweet spot well inside the cap, because short clips retain better).
+
 The numbers are conservative community-documented values; platforms change them, so every field can be
 overridden by the caller and the limits live in one place (this file).
 Safe-zone values are fractions of the frame: ``top``/``bottom``/``left``/``right`` margins to keep clear.
@@ -20,6 +23,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         "label": "TikTok",
         "aspect": "9:16", "width": WIDTH, "height": HEIGHT, "fps": FPS,
         "max_duration": 180,
+        "target_window": [15, 60],
         "safe_zone": {"top": 0.10, "bottom": 0.22, "left": 0.06, "right": 0.14},
         "caption_styles": ["tiktok_white", "tiktok_yellow", "yellow", "white"],
         "default_caption_style": "tiktok_white",
@@ -28,6 +32,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         "label": "YouTube Shorts",
         "aspect": "9:16", "width": WIDTH, "height": HEIGHT, "fps": FPS,
         "max_duration": 180,
+        "target_window": [15, 58],
         "safe_zone": {"top": 0.08, "bottom": 0.18, "left": 0.06, "right": 0.14},
         "caption_styles": ["white", "yellow", "cyan", "tiktok_white"],
         "default_caption_style": "white",
@@ -36,6 +41,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         "label": "Instagram Reels",
         "aspect": "9:16", "width": WIDTH, "height": HEIGHT, "fps": FPS,
         "max_duration": 90,
+        "target_window": [15, 60],
         "safe_zone": {"top": 0.14, "bottom": 0.24, "left": 0.06, "right": 0.12},
         "caption_styles": ["white", "pink", "yellow", "tiktok_white"],
         "default_caption_style": "white",
@@ -49,6 +55,19 @@ def list_presets() -> list[dict[str, Any]]:
     for pid, p in PRESETS.items():
         out.append({"id": pid, **p, "caption_ypos": caption_ypos(pid), "margin_v": caption_margin_v(pid)})
     return out
+
+
+LEGACY_TARGET_WINDOW = (8.0, 16.0)  # used when no export preset is chosen
+
+
+def highlight_window(preset_id: str | None) -> tuple[float, float]:
+    """(min, max) seconds the highlight director should aim for, from the preset (never above its hard cap)."""
+    p = get_preset(preset_id)
+    if not p:
+        return LEGACY_TARGET_WINDOW
+    lo, hi = p["target_window"]
+    hi = min(float(hi), float(p["max_duration"]))
+    return min(float(lo), hi), hi
 
 
 def get_preset(preset_id: str | None) -> dict[str, Any] | None:
