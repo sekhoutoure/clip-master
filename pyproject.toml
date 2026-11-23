@@ -8,12 +8,12 @@ version = "0.1.0"
 description = "Local 9:16 Shorts studio: find the best moment, track the subject, caption and export for TikTok, YouTube Shorts and Instagram Reels."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "AGPL-3.0-or-later" }
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 authors = [{ name = "Sekhou Toure" }]
 keywords = ["shorts", "tiktok", "reels", "video", "clips", "ffmpeg", "whisper", "yolo"]
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
   "Topic :: Multimedia :: Video",
 ]
 dynamic = ["dependencies"]

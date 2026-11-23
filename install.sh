@@ -78,7 +78,7 @@ if [ "$CPU" = 1 ] && [ "$(uname -s)" = "Linux" ]; then
   "$VENV_PY" -m pip install --quiet torch torchvision --index-url https://download.pytorch.org/whl/cpu
 fi
 "$VENV_PY" -m pip install -r requirements.txt
-"$VENV_PY" -m pip install --quiet -e . --no-deps
+"$VENV_PY" -m pip install --quiet -e . --no-deps 2>&1 | tail -n 3
 
 say "4/5 Models, Remotion, third-party tools"
 ARGS=(); [ "$REF" = 1 ] && ARGS+=(--with-reference)
