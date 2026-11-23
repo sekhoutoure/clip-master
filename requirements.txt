@@ -1,8 +1,8 @@
 # CLIP MASTER — Python 3.10 - 3.12 recommended (MediaPipe / PyTorch wheels).
-# Compatible-release pins ("~=") tested on 2026-11-23; upgrade at your own pace.
+# Pins keep a range that still installs on Python 3.10 (FastAPI 0.163+ and SciPy 1.16+ need 3.11/3.12).
 
 # web app
-fastapi~=0.165
+fastapi>=0.115,<0.166
 uvicorn[standard]~=0.54
 python-multipart~=0.0.34
 python-dotenv~=1.2
@@ -10,7 +10,7 @@ python-dotenv~=1.2
 # vision / media
 opencv-python>=4.10,<6
 numpy>=2.0,<3
-scipy~=1.18
+scipy>=1.14,<1.19
 pillow>=11
 imageio-ffmpeg~=0.8
 mediapipe~=1.2
