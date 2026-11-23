@@ -72,3 +72,17 @@ def test_upload_name_sanitised(client, monkeypatch):
     for p in pipeline.PROJECTS_DIR.glob("upload_*"):
         assert p.parent == pipeline.PROJECTS_DIR and "/" not in p.name and "?" not in p.name
         p.unlink()
+
+
+def test_host_header_allowlist(client):
+    assert client.get("/api/health", headers={"Host": "evil.example"}).status_code == 400
+    assert client.get("/api/health", headers={"Host": "localhost:7866"}).status_code == 200
+
+
+def test_media_traversal_blocked(client, project):
+    pid = project["id"]
+    assert client.get(f"/media/projects/{pid}/source.mp4").status_code == 200
+    for sub in ["../../_jobs.json", "..%2f..%2f_jobs.json", "%2e%2e/%2e%2e/_jobs.json"]:
+        assert client.get(f"/media/projects/{pid}/{sub}").status_code in (400, 404)
+    assert client.get("/media/projects/_queue_files/x").status_code in (400, 404)
+    assert client.get("/media/outputs/..%2fconftest.py").status_code == 404

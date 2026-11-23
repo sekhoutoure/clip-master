@@ -45,7 +45,7 @@ def sample_video() -> Path:
 def client():
     from fastapi.testclient import TestClient
     import server
-    with TestClient(server.app, headers=ORIGIN) as c:
+    with TestClient(server.app, base_url="http://127.0.0.1:7866", headers=ORIGIN) as c:
         yield c
 
 

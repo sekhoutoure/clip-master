@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
@@ -63,6 +64,10 @@ app = FastAPI(title="CLIP MASTER — 9:16 clip studio", lifespan=_lifespan)
 ALLOWED_ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}", f"http://{HOST}:{PORT}"}
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024  # hard quota, set CLIP_MASTER_MAX_UPLOAD_MB in .env
 MAX_CONCURRENT_JOBS = 1
+
+# Host header allow-list (blocks DNS-rebinding: a hostile site resolving its own name to 127.0.0.1)
+_hosts = {"localhost", "127.0.0.1", "[::1]", "::1", HOST} | {h.strip() for h in os.getenv("CLIP_MASTER_ALLOWED_HOSTS", "").split(",") if h.strip()}
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"] if HOST in ("0.0.0.0", "::") else sorted(_hosts))
 
 app.add_middleware(
     CORSMiddleware,
