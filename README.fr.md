@@ -41,6 +41,18 @@ L'installeur prépare un environnement virtuel, les paquets Python, FFmpeg et No
 - **File d'attente** : colle plusieurs liens ou dépose plusieurs fichiers ; ils sont traités un par un, annulables, relançables, et reprennent après un redémarrage.
 - **Interface FR / EN** avec bascule, et **traduction automatique des sous-titres** (fr, en, es, de, pt, it, ar).
 - **Local d'abord** : rien n'est envoyé. Transcription et rendu tournent sur ta machine.
+- **GPU si disponible** : CUDA est détecté au démarrage (`CLIP_MASTER_DEVICE=auto`). La transcription (float16) et le suivi du sujet passent alors sur le GPU ; sinon ils restent sur CPU (int8). DirectML n'est pas activé automatiquement.
+- **Nettoyage disque** : les dossiers de travail, fichiers intermédiaires et exports de plus de 48 h sont purgés au démarrage et périodiquement (`CLIP_MASTER_CACHE_TTL_HOURS=0` désactive le passage automatique). Un garde-fou peut refuser de nouveaux traitements s'il reste trop peu d'espace. Bouton **Vider le cache & anciens exports** ou `clip-master clean`.
+
+## Pipeline
+
+```mermaid
+flowchart LR
+  Ingest[Importer] --> Find[Trouver les moments forts]
+  Find --> Track[Suivi facecam]
+  Track --> Captions[Sous-titres]
+  Captions --> Export[Export]
+```
 
 ## Prérequis
 
@@ -62,7 +74,7 @@ L'installeur prépare un environnement virtuel, les paquets Python, FFmpeg et No
 | Vérifier | `./install.sh --check` | `.\install.ps1 -Check` |
 | Lancer | `./start.sh` | `start.bat` |
 
-Une fois installé : `clip-master serve`, `clip-master doctor`, `clip-master install`.
+Une fois installé : `clip-master serve`, `clip-master doctor`, `clip-master install`, `clip-master clean`.
 Les outils tiers (versions figées, licences, rôle) sont listés dans [`third_party/manifest.yml`](third_party/manifest.yml). Ils sont téléchargés sur ta machine, jamais stockés dans ce dépôt. `--with-reference` récupère aussi les sources de référence.
 
 ## Utilisation
@@ -86,7 +98,7 @@ Les valeurs sont dans [`presets.py`](presets.py) ; les plateformes changent leur
 
 ## Configuration
 
-Copie `.env.example` en `.env` (l'installeur le fait). Tout est optionnel : voir le tableau de la [version anglaise](README.md#configuration).
+Copie `.env.example` en `.env` (l'installeur le fait). Tout est optionnel : voir le tableau de la [version anglaise](README.md#configuration), y compris `CLIP_MASTER_CACHE_TTL_HOURS`, `CLIP_MASTER_MIN_FREE_MB` et `CLIP_MASTER_DEVICE`.
 
 ### Mode IA : avec ou sans clé
 
@@ -114,7 +126,9 @@ Le dépôt contient [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), une règ
 
 **`FFmpeg not found` ou sous-titres absents de l'export.** Installe un FFmpeg complet (`winget install Gyan.FFmpeg`, `brew install ffmpeg`, `sudo apt install ffmpeg`) ou renseigne `FFMPEG_PATH`.
 
-**L'installation est énorme.** Utilise `--cpu-torch` si tu n'as pas de GPU.
+**L'installation est énorme.** Utilise `--cpu-torch` si tu n'as pas de GPU. Avec un GPU CUDA, laisse `CLIP_MASTER_DEVICE=auto` pour que la transcription et le suivi du sujet l'utilisent.
+
+**Le disque se remplit de vieux projets.** Le nettoyage automatique supprime les dossiers de travail et les exports de plus de 48 h. Clique **Vider le cache & anciens exports** ou lance `clip-master clean` (ajoute `--all` pour aussi enlever le travail inutilisé encore dans le TTL). La tâche en cours et le fichier de file d'attente ne sont jamais effacés.
 
 **Un téléchargement échoue (403, connexion requise).** Mets le téléchargeur à jour (`pip install -U yt-dlp` dans `.venv`), essaie un lien direct, ou télécharge le fichier toi-même et importe le MP4.
 

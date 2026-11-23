@@ -41,6 +41,18 @@ The installer sets up a virtualenv, the Python packages, FFmpeg and Node.js if y
 - **Batch queue**: paste many links or drop many files; items run one by one, can be cancelled or retried, and survive a restart.
 - **French / English UI** with a toggle, and **automatic subtitle translation** (fr, en, es, de, pt, it, ar).
 - **Local first**: nothing is uploaded. Transcription and rendering run on your machine.
+- **GPU when available**: CUDA is detected at startup (`CLIP_MASTER_DEVICE=auto`). Transcription (float16) and subject tracking then run on the GPU; otherwise they stay on CPU (int8). DirectML is not auto-enabled.
+- **Disk cleanup**: workdirs, intermediate files and exports older than 48 hours are purged at startup and periodically (`CLIP_MASTER_CACHE_TTL_HOURS=0` disables the automatic pass). A low-disk guard can refuse new jobs. Use the **Clear cache & old exports** button or `clip-master clean`.
+
+## Pipeline
+
+```mermaid
+flowchart LR
+  Ingest[Ingest] --> Find[Find highlights]
+  Find --> Track[Track facecam]
+  Track --> Captions[Captions]
+  Captions --> Export[Export]
+```
 
 ## Requirements
 
@@ -62,7 +74,7 @@ The installer sets up a virtualenv, the Python packages, FFmpeg and Node.js if y
 | Check the setup | `./install.sh --check` | `.\install.ps1 -Check` |
 | Start | `./start.sh` | `start.bat` |
 
-Also available once installed: `clip-master serve`, `clip-master doctor`, `clip-master install`.
+Also available once installed: `clip-master serve`, `clip-master doctor`, `clip-master install`, `clip-master clean`.
 Third-party tools (pinned versions, licenses, purpose) are listed in [`third_party/manifest.yml`](third_party/manifest.yml). They are downloaded on your machine, never stored in this repository. Add `--with-reference` to also fetch the reference-only sources.
 
 ## Usage
@@ -97,7 +109,13 @@ Copy `.env.example` to `.env` (the installer does it). Everything is optional.
 | `CLIP_MASTER_MAX_UPLOAD_MB` | `2048` | Upload size limit |
 | `CLIP_MASTER_DOWNLOAD_TIMEOUT` | `1800` | Download timeout in seconds |
 | `CLIP_MASTER_DATA_DIR` | repo folder | Where `projects/`, `outputs/`, `models/` live |
+| `CLIP_MASTER_PROJECTS_DIR` / `OUTPUTS_DIR` / `MODELS_DIR` / `BIN_DIR` | under the data dir | Override a single folder |
 | `FFMPEG_PATH`, `TWITCHDOWNLOADER_CLI` | empty | Use a specific binary |
+| `CLIP_MASTER_ALLOWED_HOSTS` | empty | Extra `Host` headers to allow, comma-separated |
+| `CLIP_MASTER_CACHE_TTL_HOURS` | `48` | Auto-purge age for workdirs, intermediates and exports (`0` disables automatic cleanup) |
+| `CLIP_MASTER_MIN_FREE_MB` | `1024` | Refuse new jobs below this free space (`0` disables the guard) |
+| `CLIP_MASTER_CACHE_SWEEP_SECONDS` | `1800` | Periodic sweep interval (`0` disables the background sweeper) |
+| `CLIP_MASTER_DEVICE` | `auto` | `auto`, `cpu` or `cuda` (CUDA falls back to CPU if no GPU is found) |
 
 ### AI mode: with or without a key
 
@@ -125,7 +143,9 @@ The repo ships [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), a Cursor rule
 
 **`FFmpeg not found` or captions are missing in the export.** Install a full FFmpeg (`winget install Gyan.FFmpeg`, `brew install ffmpeg`, `sudo apt install ffmpeg`) or set `FFMPEG_PATH`.
 
-**The install is very large.** Use `--cpu-torch` if you have no GPU.
+**The install is very large.** Use `--cpu-torch` if you have no GPU. With a CUDA GPU, leave `CLIP_MASTER_DEVICE=auto` so transcription and subject tracking use it.
+
+**The disk fills up with old projects.** Automatic cleanup removes workdirs and exports older than 48 hours. Click **Clear cache & old exports** or run `clip-master clean` (add `--all` to also remove unused work still inside the TTL). The current job and the queue file are never deleted.
 
 **A download fails (403, sign-in required).** Update the downloader (`pip install -U yt-dlp` in `.venv`), try a direct link, or download the file yourself and upload the MP4.
 

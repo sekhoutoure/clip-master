@@ -5,6 +5,9 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 ## [Unreleased]
 
 - UI and in-app messages now use neutral CLIP MASTER feature names. Third-party credits stay in NOTICE.md, the README credits section, and `third_party/`.
+- Automatic cleanup of project workdirs, intermediate files and exports older than 48 hours (`CLIP_MASTER_CACHE_TTL_HOURS`, `0` disables the automatic pass). Runs at startup and periodically. A low-disk guard can refuse new jobs (`CLIP_MASTER_MIN_FREE_MB`). `POST /api/cache/clean`, a **Clear cache & old exports** / **Vider le cache & anciens exports** button, and `clip-master clean`. The current job and the queue file are never deleted.
+- CUDA is autodetected at startup (`CLIP_MASTER_DEVICE=auto|cpu|cuda`). Transcription uses GPU float16 and subject tracking uses YOLO `device=0` when CUDA is available, otherwise CPU int8. Exposed in `GET /api/mode` and `clip-master doctor`. DirectML is not auto-enabled.
+- README pipeline diagram (Ingest → Find highlights → Track facecam → Captions → Export). `.env.example` lists every expected variable, with no real secrets.
 
 ## [0.1.0] - 2026-11-23
 
