@@ -24,12 +24,8 @@ from pipeline import (
     stage_05_ship,
 )
 
-GROQ_API_KEY = _cfg.GROQ_API_KEY
-GROQ_MODEL_SMALL = _cfg.GROQ_MODEL_SMALL
-GROQ_MODEL_BIG = _cfg.GROQ_MODEL_BIG
-GROQ_URL = _cfg.GROQ_URL
-OLLAMA_URL = _cfg.OLLAMA_URL
-OLLAMA_MODEL = _cfg.OLLAMA_MODEL
+import llm as _llm
+from llm import call_llm_json  # noqa: F401  (re-exported)
 
 _EVENTS_LOCK = threading.Lock()
 _EVENT_SEQ = 0
@@ -95,62 +91,10 @@ def get_live_agent_state(since_seq: int = 0) -> dict[str, Any]:
         "latest_seq": latest_seq,
         "active_agents": active,
         "events": events,
-        "llm_provider": "groq" if GROQ_API_KEY else "ollama",
-        "llm_model": GROQ_MODEL_SMALL if GROQ_API_KEY else OLLAMA_MODEL,
-        "llm_ready": bool(GROQ_API_KEY),
+        "llm_provider": _llm.provider(),
+        "llm_model": _llm.llm_status(probe=False)["model"],
+        "llm_ready": _llm.llm_status()["ready"],
     }
-
-
-def call_llm_json(system_prompt: str, user_prompt: str, use_big: bool = False, timeout: int = 25) -> dict[str, Any]:
-    """Call real Groq LLM (or local Ollama fallback) and parse JSON response."""
-    model = (GROQ_MODEL_BIG if use_big else GROQ_MODEL_SMALL) if GROQ_API_KEY else OLLAMA_MODEL
-    if GROQ_API_KEY:
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt + "\nRespond ONLY with valid JSON, no markdown fences."},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": 0.2,
-            "max_tokens": 700,
-        }
-        req = urllib.request.Request(
-            GROQ_URL,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json",
-                "User-Agent": "ClipMaster-AgentCrew/1.0",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = json.loads(resp.read().decode("utf-8"))
-            content = raw["choices"][0]["message"]["content"].strip()
-    else:
-        payload = {
-            "model": OLLAMA_MODEL,
-            "messages": [
-                {"role": "system", "content": system_prompt + "\nRespond ONLY with valid JSON."},
-                {"role": "user", "content": user_prompt},
-            ],
-            "stream": False,
-        }
-        req = urllib.request.Request(
-            OLLAMA_URL,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = json.loads(resp.read().decode("utf-8"))
-            content = raw.get("message", {}).get("content", "{}").strip()
-
-    # Strip <think>...</think> or markdown fences if present
-    content = re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
-    content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content, flags=re.M).strip()
-    m = re.search(r"\{[\s\S]*\}", content)
-    if not m:
-        raise ValueError(f"LLM did not return JSON: {content[:200]}")
-    return json.loads(m.group(0))
 
 
 # ---------------------------------------------------------------------------
@@ -204,8 +148,8 @@ def run_autonomous_agent_crew(
     project = load_project(project_id)
 
     # --- STEP 2: RMS Waveform Silence & Cut Density Analyst (pure Python RMS) ---
-    llm_provider_label = "Groq LLM" if GROQ_API_KEY else "Ollama LLM"
-    llm_model_name = GROQ_MODEL_SMALL if GROQ_API_KEY else OLLAMA_MODEL
+    llm_provider_label = {"groq": "Groq LLM", "ollama": "Ollama LLM"}.get(_llm.provider(), "Heuristic")
+    llm_model_name = _llm.llm_status(probe=False)["model"] or "heuristics"
     llm_short = llm_model_name.split("/")[-1]
     wf = project.get("waveform") or [0.5] * 120
     min_idx = int(min(range(len(wf)), key=lambda i: wf[i])) if wf else 0
