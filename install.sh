@@ -52,7 +52,8 @@ if [ "$CHECK" = 1 ]; then
 fi
 
 say "1/5 Python"
-PY="$(find_python)"; echo "using $PY ($($PY --version 2>&1))"
+if [ -z "$PY_REQ" ] && [ -x "$VENV_PY" ]; then PY="$VENV_PY"; else PY="$(find_python)"; fi
+echo "using $PY ($($PY --version 2>&1))"
 
 say "2/5 System tools (ffmpeg, node)"
 pm_install() {  # $1 = description, rest = packages per manager

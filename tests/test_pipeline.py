@@ -120,3 +120,57 @@ def test_i18n_dictionaries_have_same_keys():
     js = (root / "app.js").read_text(encoding="utf-8") + (root / "features.js").read_text(encoding="utf-8")
     static_keys = {k for k in re.findall(r"\bt\('([\w.]+)'", js) if not k.endswith('.')}
     assert static_keys <= set(fr), static_keys - set(fr)
+
+
+def test_agent_skills_are_valid_and_mirrored():
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    names = sorted(p.name for p in (root / "skills").iterdir() if p.is_dir())
+    assert {"install-clip-master", "make-a-short-from-vod", "batch-clips", "export-presets", "troubleshoot"} <= set(names)
+    for n in names:
+        text = (root / "skills" / n / "SKILL.md").read_text(encoding="utf-8")
+        m = re.match(r"^---\nname: (.+)\ndescription: (.+)\n---\n", text)
+        assert m and m.group(1) == n and len(m.group(2)) > 40, n
+        assert (root / ".claude" / "skills" / n / "SKILL.md").read_text(encoding="utf-8") == text, f"mirror out of date: {n}"
+    for doc in ("AGENTS.md", "CLAUDE.md"):
+        body = (root / doc).read_text(encoding="utf-8")
+        assert "install-clip-master" in body or "AGENTS.md" in body
+
+
+def test_manifest_is_valid_and_licensed():
+    import bootstrap
+    items = bootstrap.load_manifest()
+    names = {i["name"] for i in items}
+    assert {"yt-dlp", "TwitchDownloaderCLI", "SAM-2", "FFmpeg"} <= names
+    assert "remotion-skills" not in {n.lower() for n in names}          # no license -> never fetched
+    for i in items:
+        assert i["kind"] in ("pip", "npm", "system", "binary", "git")
+        assert str(i["license"]).strip() and i["license"].lower() not in ("none", "unknown")
+        if i["kind"] == "git":
+            assert i["ref"] and i.get("default") is False
+        if i["kind"] == "binary":
+            for k, v in i.items():
+                if k.startswith("asset_"):
+                    assert len(i["sha256_" + k[6:]]) == 64
+
+
+def test_manifest_simple_parser_matches_yaml():
+    import bootstrap
+    import yaml
+    text = bootstrap.MANIFEST.read_text(encoding="utf-8")
+    assert bootstrap._parse_simple_yaml(text) == yaml.safe_load(text)
+
+
+def test_workflows_parse():
+    import yaml
+    from pathlib import Path
+    for f in (Path(__file__).resolve().parents[1] / ".github" / "workflows").glob("*.yml"):
+        d = yaml.safe_load(f.read_text(encoding="utf-8"))
+        assert d["jobs"], f
+
+
+def test_doctor_json_shape():
+    import bootstrap
+    rep = bootstrap.doctor()
+    assert rep.rows and all({"status", "name", "detail", "fix"} <= set(r) for r in rep.rows)
